@@ -1,41 +1,59 @@
-/*
- * Barrier.h
- *
- * I adapted this code from a listing on Stackexchange to suit my needs.  I
- * chose to use this over the provided Barrier class because it had a good
- * solution for waiting (no need to keep track of how many threads are working
- * upstream).  The original code was authored by users Alexander Daryin and
- * Jinfeng Yang.  Their code was great except for getting cute with
- * pre-decrement and lambda expressions.  I imagine they are wonderful
- * obfuscators.
- *
- * URL:
- * https://stackoverflow.com/questions/24465533/implementing-boostbarrier-in-c11#24465624
- */
+// Barrier.h - A class that implements a Barrier
 
-#ifndef BARR_H
-#define BARR_H
-#include <thread>
-#include <mutex>
+#ifndef BARRIER_H
+#define BARRIER_H
+
 #include <condition_variable>
+#include <mutex>
+#include <iostream>
 
-class Barrier{
-	public:
+/* Usage:
+	1. Create an instance of a Barrier class (called, say, "b") that
+	   is accessible to, but outside the scope of any thread code that
+	   needs to use it.
+	2. In the thread code where barrier synchronization is to occur,
+	   each thread in the "barrier group" must execute:
 
-		Barrier(int count);
+	   b.barrier(num); // where "num" is the number of threads in
+	                   // the "barrier group"
+*/
 
-		// Wait for the rest of the group to arrive
-		void wait();
+/* KNOWN DESIGN FLAW (2017-02-21):
+	It is assumed that all threads in a barrier group will invoke the barrier
+	method with the same (and correct) value for "numInBarrierGroup". If any
+	thread calls the barrier method with a different value, various things may
+	occur, depending on the value passed. For example, the barrier may
+	immediately empty, or all threads may remain stuck at the barrier
+	indefinitely.
+*/
 
-		// A thread has finished, and the group is now smaller (bound
-		// below by 0)
-		void decrement();
+class Barrier
+{
+public:
+	Barrier() : barrierCounter(0) {}
+	virtual ~Barrier() {}
 
-	private:
-		std::mutex m_mutex;
-		std::condition_variable m_condition;
-		int m_count;
-		int m_threshold;
+	void barrier(int numInBarrierGroup)
+	{
+		std::unique_lock<std::mutex> ulbm(barrierMutex);
+		std::cout << "BARRIER\n";
+
+		barrierCounter++;
+		if (barrierCounter != numInBarrierGroup){
+			barrierCV.wait(ulbm);
+		}
+		else
+		{
+			barrierCounter = 0;
+			barrierCV.notify_all();
+		}
+		std::cout << "AWOKEN\n";
+	}
+private:
+	int barrierCounter;
+	std::mutex barrierMutex;
+	std::condition_variable barrierCV;
 };
 
 #endif
+
