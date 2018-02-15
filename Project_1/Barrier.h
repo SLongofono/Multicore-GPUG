@@ -36,7 +36,6 @@ public:
 	void barrier(int numInBarrierGroup)
 	{
 		std::unique_lock<std::mutex> ulbm(barrierMutex);
-		std::cout << "BARRIER\n";
 
 		barrierCounter++;
 		if (barrierCounter != numInBarrierGroup){
@@ -47,7 +46,6 @@ public:
 			barrierCounter = 0;
 			barrierCV.notify_all();
 		}
-		std::cout << "AWOKEN\n";
 	}
 private:
 	int barrierCounter;

@@ -28,13 +28,13 @@
 using namespace std;
 
 // Globals for synchronization
-mutex ***tracks;	// Protect access to tracks as a matrix of edges
+atomic_flag ***tracks;		// Protect access to tracks as a matrix of edges
 mutex *printLock = new mutex;	// Protect stdout
 mutex *activeLock = new mutex;	// Protect number of trains
-int nActiveTrains;	// Current number of trains
-int nActiveTrainsNext;	// Number of trains t+1;
-Barrier *lockstep = new Barrier;	// Barrier instance
-
+mutex *nextLock = new mutex; 	// Protect number of trains t+1
+int nActiveTrains;		// Current number of trains
+int nActiveTrainsNext;		// Number of trains t+1
+Barrier *lockstep = new Barrier;// Barrier instance
 
 
 /*
@@ -80,28 +80,15 @@ int work(int name, vector<int> route){
 	currPos = 0;
 	endPos = route.size() - 1;
 
-	printLock->lock();
-	cout << "Train stats: " << (char)(65+name) << endl;
-	cout << "Current position: " << route.at(currPos) << endl;
-	cout << "Next position: " << route.at(currPos+1) << endl;
-	cout << "Final position: " << route.at(endPos) << endl;
-	printLock->unlock();
-
 	while(currPos != endPos){
 		updateActiveTrains(activeLock);
 		
 		assert(getActiveTrains(activeLock) > 0);
 
-
 		src = route.at(currPos);
-		dest = route.at(currPos + 1); // <= endPos ? route.at(currPos + 1): route.at(endPos);
+		dest = route.at(currPos + 1);
 
-		printLock->lock();
-		cout << "There are now " << getActiveTrains(activeLock) << " trains traveling" << endl;
-		printLock->unlock();
-
-		
-		if(tracks[src][dest]-> try_lock()){
+		if(tracks[src][dest]-> test_and_set(memory_order_acq_rel)){
 			printLock->lock();
 			cout << "At time step: " << time << " train "
 			     << (char)(65+name) << " is going from station "
@@ -110,8 +97,8 @@ int work(int name, vector<int> route){
 
 			// wait a moment so other threads definitely don't get
 			// the lock this time instance
-			this_thread::sleep_for(chrono::milliseconds(50));
-			tracks[src][dest] -> unlock();
+			//this_thread::sleep_for(chrono::milliseconds(50));
+			tracks[src][dest] -> clear(memory_order_release);
 			currPos++;
 		}
 		else{
@@ -125,14 +112,28 @@ int work(int name, vector<int> route){
 		lockstep->barrier(getActiveTrains(activeLock));
 	}
 	
+
 	// We have finished.  Adjust the next active trains
-	activeLock->lock();
+	nextLock->lock();
 	nActiveTrainsNext--;
-	activeLock->unlock();
-	
+	nextLock->unlock();
+
+	printLock->lock();
+	cout << "Train " << (char)(65+name) << " has arrived!" << endl;
+	printLock->unlock();
+
+
+	int numActive = getActiveTrains(activeLock);
+	printLock->lock();
+	cout << "There are currently " << numActive << " active trains " << endl;
+	printLock->unlock();
+	// Hop back into the barrier one last time to resolve the last round.
+	// Use the old number of active trains
+	if(numActive > 1){
+		lockstep->barrier(getActiveTrains(activeLock));
+	}
+
 	return time;
-
-
 }
 
 
@@ -149,7 +150,7 @@ int main(int argc, char **argv){
 
 	ifstream infile(argv[1]);
 	
-	int nTrains, nStations, n;
+	int nTrains, nStations, n, biggestStation = 0;
 	vector<int> *routes;
 	string s;
 	
@@ -162,6 +163,11 @@ int main(int argc, char **argv){
 			stringstream line(s);
 			while(line >> n){
 				routes[i].push_back(n);
+
+				// Assumes a monotonic numbering of stations
+				if( n>biggestStation ){
+					biggestStation = n;
+				}
 			}
 		}
 	}
@@ -175,7 +181,6 @@ int main(int argc, char **argv){
 
 	nActiveTrains = nTrains;
 	nActiveTrainsNext = nTrains;
-
 
 	cout << "Got " << nTrains << " trains and " << nStations << " stations" << endl;
 
@@ -192,19 +197,21 @@ int main(int argc, char **argv){
 	 * Initialize a matrix of edges represented by atomic booleans
 	 */
 
-	tracks = new mutex **[nStations];
-	for(int i = 0; i<nStations; ++i){
-		tracks[i] = new mutex *[nStations];
-		for(int j = i; j<nStations; ++j){
-			mutex *m = new mutex;
-			tracks[i][j] = m;
+	tracks = new atomic_flag **[biggestStation+1];
+	for(int i = 0; i<= biggestStation; ++i){
+		tracks[i] = new atomic_flag *[biggestStation+1];
+		for(int j = i; j<= biggestStation; ++j){
+			atomic_flag *f = new atomic_flag;
+			f->clear();
+			tracks[i][j] = f;
 		}
 	}
 
+
 	// The references are reflected about the trace, since the track (0,1)
 	// is identical to (1,0)
-	for(int i = 0; i< nStations; ++i){
-		for(int j = i; j< nStations; ++j){
+	for(int i = 0; i<= biggestStation; ++i){
+		for(int j = i; j<= biggestStation; ++j){
 			tracks[j][i] = tracks[i][j];
 		}
 	}
@@ -244,6 +251,7 @@ int main(int argc, char **argv){
 	delete [] tracks;
 	delete [] routes;
 	delete lockstep;
-
+	delete printLock;
+	delete activeLock;
 	return 0;
 }
