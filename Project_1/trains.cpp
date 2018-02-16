@@ -10,19 +10,24 @@
  *
  */
 
+// Get stuff
 #include <iostream>
 #include <thread>
 #include <fstream>
 #include <sstream>
+
+// Hold stuff
 #include <vector>
 #include <string>
+
+// Synchronize stuff
 #include <thread>
 #include <future>
 #include <mutex>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include "Barrier.h"
-#include <cassert>
 
 
 using namespace std;
@@ -48,29 +53,42 @@ int getActiveTrains(mutex *m){
 	return ret;
 }
 
-void updateActiveTrains(mutex *m){
-	m->lock();
+/*
+ * Safely update nActiveTrains to nActiveTrainsNext
+ */
+void updateActiveTrains(mutex *curr, mutex *next){
+	curr->lock();
+	next->lock();
 	nActiveTrains = nActiveTrainsNext;
-	m->unlock();
+	next->unlock();
+	curr->unlock();
 }
 
 /*
- * Work function for threads.  Assumes at least pair of stations along the
- * route.  Returns the time in which it finished
+ * Helper function to print train names.  Assumes ASCII is OK on your system
+ */
+char getName(int n){
+	return (char)(65+n);
+}
+
+
+/*
+ * @brief Work function for threads.
  *
- * Notes 2/14
+ * @description Assumes at least pair of stations along the
+ * route.  Returns the time instant in which it is at its final station and
+ * ready to respond.  Assumes that there is a section of track connecting any
+ * consecutive stations in the route, and that this track can be traversed in
+ * one time instant.
  *
- * We cant rely on longestRoute because contention make finish time
- * nondeterministic.  Instead, we need to keep track of the current number of
- * active trains, and the number of active trains at the next time instant.  
+ * @param name The thread ID, interpreted as the offset from 65 in the ASCII
+ * alphabet
  *
- * By placing the barrier at the end of the main loop, we can have all active
- * trains using the same number for barrier calls.  When a train arrives, it
- * adjusts the NEXT number of active trains downward.  Back at the top of the
- * loop, we set the current number of active trains to the next number of
- * active trains, ensuring that the barrier count is always accurate.  This
- * also allows finished threads to kick out and be done.
+ * @param route A vector representing the complete route that this train's
+ * thread will run.
  *
+ * @return The time instant at which this train is at its destination and
+ * ready to move again.
  */
 int work(int name, vector<int> route){
 
@@ -81,9 +99,11 @@ int work(int name, vector<int> route){
 	endPos = route.size() - 1;
 
 	while(currPos != endPos){
-		updateActiveTrains(activeLock);
-		
-		assert(getActiveTrains(activeLock) > 0);
+		updateActiveTrains(activeLock, nextLock);
+
+		if(getActiveTrains(activeLock) > 1){
+			lockstep->barrier(getActiveTrains(activeLock));
+		}
 
 		src = route.at(currPos);
 		dest = route.at(currPos + 1);
@@ -91,7 +111,7 @@ int work(int name, vector<int> route){
 		if(tracks[src][dest]-> test_and_set(memory_order_acq_rel)){
 			printLock->lock();
 			cout << "At time step: " << time << " train "
-			     << (char)(65+name) << " is going from station "
+			     << getName(name) << " is going from station "
 			     << src << " to station " << dest << endl;
 			printLock->unlock();
 
@@ -104,33 +124,26 @@ int work(int name, vector<int> route){
 		else{
 			printLock->lock();
 			cout << "At time step: " << time << " train "
-			     << (char)(65+name) << " must stay at station "
+			     << getName(name) << " must stay at station "
 			     << src << endl;
 			printLock->unlock();
 		}
 		time++;
+		
+
+		// Need to check if we are done here, because it will not
+		// always work out that the number of active trains is updated
+		// before trains that finish can update it.
+		if(currPos == endPos){
+			// Adjust nActiveTrainsNext so that the next round of
+			// barriers works correctly.
+			nextLock->lock();
+			nActiveTrainsNext--;
+			nextLock->unlock();
+		}
+
 		lockstep->barrier(getActiveTrains(activeLock));
-	}
-	
-
-	// We have finished.  Adjust the next active trains
-	nextLock->lock();
-	nActiveTrainsNext--;
-	nextLock->unlock();
-
-	printLock->lock();
-	cout << "Train " << (char)(65+name) << " has arrived!" << endl;
-	printLock->unlock();
-
-
-	int numActive = getActiveTrains(activeLock);
-	printLock->lock();
-	cout << "There are currently " << numActive << " active trains " << endl;
-	printLock->unlock();
-	// Hop back into the barrier one last time to resolve the last round.
-	// Use the old number of active trains
-	if(numActive > 1){
-		lockstep->barrier(getActiveTrains(activeLock));
+		
 	}
 
 	return time;
@@ -178,20 +191,8 @@ int main(int argc, char **argv){
 
 	infile.close();
 
-
 	nActiveTrains = nTrains;
 	nActiveTrainsNext = nTrains;
-
-	cout << "Got " << nTrains << " trains and " << nStations << " stations" << endl;
-
-	cout << "Train routes:" << endl;
-
-	for(int i = 0; i<nTrains; ++i){
-		for(int n : routes[i]){
-			cout << n << " ";
-		}
-		cout << endl;
-	}
 
 	/*
 	 * Initialize a matrix of edges represented by atomic booleans
@@ -207,7 +208,6 @@ int main(int argc, char **argv){
 		}
 	}
 
-
 	// The references are reflected about the trace, since the track (0,1)
 	// is identical to (1,0)
 	for(int i = 0; i<= biggestStation; ++i){
@@ -218,8 +218,13 @@ int main(int argc, char **argv){
 
 	cout << "Starting simulation..." << endl;
 
+	// Catch futures in a vector, since future pointers are wonky
 	std::vector<future<int>> results;
+
+	// Catch finish times separately since the futures are destroyed as
+	// they resolve
 	int finishTimes[nTrains];
+
 	for(int i = 0; i < nTrains; ++i){
 		future<int> temp = async(launch::async, work, i, routes[i]);
 		// "Move" the semantic record so the future ends up in the
@@ -239,7 +244,7 @@ int main(int argc, char **argv){
 	 */
 
 	for(int i = 0; i<nTrains; ++i){
-		cout << "Train " << (char)(65+i) << " completed its route at time step " << finishTimes[i] << endl;
+		cout << "Train " << getName(i) << " completed its route at time step " << finishTimes[i] << endl;
 		routes[i].clear();
 	}
 	for(int i = 0; i<nStations; ++i){
@@ -253,5 +258,6 @@ int main(int argc, char **argv){
 	delete lockstep;
 	delete printLock;
 	delete activeLock;
+	delete nextLock;
 	return 0;
 }

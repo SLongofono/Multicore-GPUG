@@ -47,6 +47,7 @@ public:
 			barrierCV.notify_all();
 		}
 	}
+
 private:
 	int barrierCounter;
 	std::mutex barrierMutex;
