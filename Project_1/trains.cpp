@@ -33,7 +33,7 @@
 using namespace std;
 
 // Globals for synchronization
-atomic_flag ***tracks;		// Protect access to tracks as a matrix of edges
+mutex ***tracks;		// Protect access to tracks as a matrix of edges
 mutex *printLock = new mutex;	// Protect stdout
 mutex *activeLock = new mutex;	// Protect number of trains
 mutex *nextLock = new mutex; 	// Protect number of trains t+1
@@ -93,33 +93,28 @@ char getName(int n){
 int work(int name, vector<int> route){
 
 	
-	int currPos, endPos, time, src, dest;
+	int currPos, endPos, time, src, dest, havelock;
 	time = 0;
 	currPos = 0;
 	endPos = route.size() - 1;
+	havelock = 0;
 
 	while(currPos != endPos){
 		updateActiveTrains(activeLock, nextLock);
 
-		if(getActiveTrains(activeLock) > 1){
-			lockstep->barrier(getActiveTrains(activeLock));
-		}
+		lockstep->barrier(getActiveTrains(activeLock));
 
 		src = route.at(currPos);
 		dest = route.at(currPos + 1);
 
-		if(tracks[src][dest]-> test_and_set(memory_order_acq_rel)){
+		if(tracks[src][dest]-> try_lock()){
 			printLock->lock();
 			cout << "At time step: " << time << " train "
 			     << getName(name) << " is going from station "
 			     << src << " to station " << dest << endl;
 			printLock->unlock();
-
-			// wait a moment so other threads definitely don't get
-			// the lock this time instance
-			//this_thread::sleep_for(chrono::milliseconds(50));
-			tracks[src][dest] -> clear(memory_order_release);
 			currPos++;
+			havelock = 1;
 		}
 		else{
 			printLock->lock();
@@ -130,6 +125,7 @@ int work(int name, vector<int> route){
 		}
 		time++;
 		
+
 
 		// Need to check if we are done here, because it will not
 		// always work out that the number of active trains is updated
@@ -143,6 +139,14 @@ int work(int name, vector<int> route){
 		}
 
 		lockstep->barrier(getActiveTrains(activeLock));
+		
+		// If we have the lock, release it.  We need to hold it until
+		// here to be sure that all threads have only one shot at the
+		// track per instant of time.
+		if(havelock){
+			havelock = 0;
+			tracks[src][dest] -> unlock();
+		}
 		
 	}
 
@@ -174,6 +178,10 @@ int main(int argc, char **argv){
 		for(int i = 0; i < nTrains; ++i){
 			getline(infile, s);
 			stringstream line(s);
+
+			// Burn station count, don't need it
+			line >> n;
+
 			while(line >> n){
 				routes[i].push_back(n);
 
@@ -198,12 +206,11 @@ int main(int argc, char **argv){
 	 * Initialize a matrix of edges represented by atomic booleans
 	 */
 
-	tracks = new atomic_flag **[biggestStation+1];
+	tracks = new mutex **[biggestStation+1];
 	for(int i = 0; i<= biggestStation; ++i){
-		tracks[i] = new atomic_flag *[biggestStation+1];
+		tracks[i] = new mutex *[biggestStation+1];
 		for(int j = i; j<= biggestStation; ++j){
-			atomic_flag *f = new atomic_flag;
-			f->clear();
+			mutex *f = new mutex;
 			tracks[i][j] = f;
 		}
 	}
@@ -212,7 +219,9 @@ int main(int argc, char **argv){
 	// is identical to (1,0)
 	for(int i = 0; i<= biggestStation; ++i){
 		for(int j = i; j<= biggestStation; ++j){
-			tracks[j][i] = tracks[i][j];
+			if(i != j){
+				tracks[j][i] = tracks[i][j];
+			}
 		}
 	}
 
