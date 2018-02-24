@@ -126,7 +126,6 @@ int work(int name, vector<int> route){
 		time++;
 		
 
-
 		// Need to check if we are done here, because it will not
 		// always work out that the number of active trains is updated
 		// before trains that finish can update it.
@@ -140,7 +139,7 @@ int work(int name, vector<int> route){
 
 		lockstep->barrier(getActiveTrains(activeLock));
 		
-		// If we have the lock, release it.  We need to hold it until
+		// If we have the lock, release it.  We need to hold it 
 		// here to be sure that all threads have only one shot at the
 		// track per instant of time.
 		if(havelock){
@@ -148,6 +147,12 @@ int work(int name, vector<int> route){
 			tracks[src][dest] -> unlock();
 		}
 		
+	}
+
+
+	// If we finish, make sure to release lock
+	if(havelock){
+		tracks[src][dest] -> unlock();
 	}
 
 	return time;
