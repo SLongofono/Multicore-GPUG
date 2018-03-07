@@ -1,0 +1,35 @@
+Basic Game Plan
+
+Problem Notables:
+  - rank 0 process reads in all N images, storing their contents in a Packed3DArray object with the ImageReader class.
+  - rank 0 distributes a Packed3DArray to each rank containing the image data.  An accompanying message is sent with the
+    dimensions of the image
+  - rank i uses its Packed3DArray to determine a triplet of histograms for the red, blue, and green channels stored in
+    the Packed3DArray.  Each histogram contains a float for each of the 256 color value levels, which represents what
+    percentage of the image falls in that level.  So if half of the pixels had 128 as the blue value, then the histogram
+    at position 128 would be 0.5
+  - rank i needs to distribute its histograms to all other ranks
+  - rank i needs to compare its histograms to all other histograms, and identify the image which is most similar.
+  - rank i communicates the rank of the image closest to it to rank 0.
+  - rank 0 prints out a report of what each rank said.  For example, if rank 4 reports that is is most like the image from
+    rank 16, then both 4 and 16 will report each other's rank
+  - Most similar means that the grand sum of the differences between respective histograms is smallest.  So take the absolute
+    difference of each value in the blue histograms, add it to the same computation over the red histogram, and add that to
+    the same computation over the green histogram.  The smallest such result belongs to the image which is closest.
+
+Initial Ideas:
+  - rank 0 is distributing a lot of data at the get go.  Intead of reading in all files and then distributing all at once,
+    it would probably be more efficient to prepare them one at a time, fire them off with an Isend, and process the next one.
+  - Distributing the histograms is definitely an All-to-all gather candidate.  We can take advantage of the internal distribution
+    algorithms.
+  - Designing and using a custom data type seems more trouble than it is worth.  Better to use tags and separate messages.
+  - Distributing the histograms should be an immediate send, but we need to make sure that the data is there before we start
+    working on it.  Check to see if there is a convenient mode for this, otherwise just use the wait all thing.
+  - Getting the report back to rank 0 is clearly an immediate send
+  - Receiving the report in rank 0 will need to be blocking, but there should be a clever way to catch them as they come in
+    (wait any? in a while loop?)
+    
+Deliverables:
+  - The working code, with some test images maybe?
+  - A rationale for choices of message design, in line with the notes above.  Justify each message's existence and demonstrate
+    why it should or should not block.
