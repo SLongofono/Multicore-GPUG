@@ -58,8 +58,8 @@ int main(int argc, char **argv){
 			for(int i = 0; i<dims[0]; ++i){
 				for(int j =0; j<dims[1]; ++j){
 					for(int k = 0; k<3; ++k){
-					// 3D indexing: i*rows*cols + j*cols + k
-						flatpack[(i*dims[0]*dims[1]) + (j*dims[1]) + k ] = arr->getDataElement(i,j,k);
+					// 3D indexing: i*cols*depth + j*depth + k
+						flatpack[(i*dims[1]*3) + (j*3) + k ] = arr->getDataElement(i,j,k);
 					}
 				}
 			}
