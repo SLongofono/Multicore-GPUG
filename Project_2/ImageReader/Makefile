@@ -10,7 +10,7 @@ OBJS = ImageReader.o BMPImageReader.o BMPLoader.o JPEGImageReader.o TGAImageRead
 	cp libCOGLImageReader.so ../lib/
 
 libCOGLImageReader.so: $(OBJS)
-	g++ -shared -o libCOGLImageReader.so $(OBJS) -lpng -ljpeg
+	g++ -shared -o libCOGLImageReader.so $(OBJS) -lpng -ljpeg 
 
 ImageReader.o: ImageReader.c++
 	$(CPP) $(CFLAGS) ImageReader.c++
