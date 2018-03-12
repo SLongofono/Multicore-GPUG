@@ -6,6 +6,43 @@
 
 using namespace std;
 
+
+// Populate destination with a normalized count of pixel weights (0-255) along dim3,
+// representing the percentage of pixels with each weight in a single color
+// channel.  Note we pass by reference since heap allocation will change the
+// address used in virtual memory
+void normalized_count(float *&dest, unsigned char *data, int dim1, int dim2, int dim3){
+	dest = new float[256];
+	int val;
+	float norm;
+	int counts[256] = {0};
+	for(int i = 0; i<dim1; ++i){
+		for(int j = 0; j<dim2; ++j){
+			val = data[i*dim2*3 + j*3 + dim3];
+			counts[val]++;
+		}
+	}
+	norm = dim1*dim2;
+	float sanity = 0.0;
+	for(int k = 0; k<256; ++k){
+		dest[k] = counts[k]/norm;
+		sanity += dest[k];
+	}
+	cout << "SANITY CHECK: channel percentage sums to " << sanity*100 << endl;
+}
+
+int max_report(float *data){
+	float currmax = *data;
+	int curpos = 0;
+	for(int i = 0; i<256; ++i){
+		if(data[i] > currmax){
+			currmax = data[i];
+			curpos = i;
+		}
+	}
+	return curpos;
+}
+
 int main(int argc, char **argv){
 	
 	int numNodes, rank;
@@ -32,7 +69,13 @@ int main(int argc, char **argv){
 		// Wait for image data in a tag 1 message
 		MPI_Recv(rawData, sizeof(rawData), MPI_UNSIGNED_CHAR, 0, 1, MPI_COMM_WORLD, &status);
 
-		cout << "NODE " << rank << " got image..." << endl;
+		cout << "NODE " << rank << " got image with " << dims[0]*dims[1] << " pixels..." << endl;
+
+		float * rchannel;
+		
+		normalized_count(rchannel, rawData, dims[0], dims[1], 0);
+		int maxpos = max_report(rchannel);
+		cout << "NODE " << rank << " red channel has highest percentage of " << rchannel[maxpos] << " at value " << maxpos << endl;
 
 	}
 	else{
