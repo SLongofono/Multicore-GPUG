@@ -49,8 +49,6 @@ int main(int argc, char **argv){
 	cryph::Packed3DArray<unsigned char> *arr;
 	int dims[2];
 
-	string s = "doop.txt";
-
 	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &numNodes);
@@ -71,22 +69,29 @@ int main(int argc, char **argv){
 
 		cout << "NODE " << rank << " got image with " << dims[0]*dims[1] << " pixels..." << endl;
 
+
+		// Compute histograms
 		float * rchannel;
 		
 		normalized_count(rchannel, rawData, dims[0], dims[1], 0);
 		int maxpos = max_report(rchannel);
 		cout << "NODE " << rank << " red channel has highest percentage of " << rchannel[maxpos] << " at value " << maxpos << endl;
 
+		// All-to-all gather to get results from other ranks
+
+		// Determine the most similar rank, and report back to rank 0
+
+
 	}
 	else{
 		// We are the root
 		cout << "ROOT " << rank << endl;
 
-		for(int i = 1; i < numNodes; ++i){
-			cout << argv[i+1] << endl;
+		for(int n = 1; n < numNodes; ++n){
+			cout << argv[n+1] << endl;
 
 			// Prepare a packed array from the image
-			ImageReader * ir = ImageReader::create(argv[i]);
+			ImageReader *ir = ImageReader::create(argv[n+1]);
 			assert(nullptr != ir);
 			arr = ir->getInternalPacked3DArrayImage();
 			assert(nullptr != arr);
@@ -94,7 +99,7 @@ int main(int argc, char **argv){
 			// Send a message indicating the dimensions
 			dims[0] = arr->getDim1();
 			dims[1] = arr->getDim2();
-			MPI_Isend(dims, 2, MPI_INT, i, 0, MPI_COMM_WORLD, &rq);
+			MPI_Isend(dims, 2, MPI_INT, n, 0, MPI_COMM_WORLD, &rq);
 
 			cout << "Root flattening image..." << endl;
 
@@ -111,13 +116,37 @@ int main(int argc, char **argv){
 				}
 			}
 
-			cout << "Root sending " << sizeof(flatpack) << " chars to rank " << i << endl;
-
 			// Fire it off to the appropriate node
-			MPI_Isend(flatpack, dims[0]*dims[1]*3, MPI_UNSIGNED_CHAR, i, 1, MPI_COMM_WORLD, &rq);
+			MPI_Isend(flatpack, dims[0]*dims[1]*3, MPI_UNSIGNED_CHAR, n, 1, MPI_COMM_WORLD, &rq);
 		}
 
 		// Do our work while the rest complete
+
+		// Prepare our image
+		ImageReader *ir = ImageReader::create(argv[1]);
+		arr = ir->getInternalPacked3DArrayImage();
+		dims[0] = arr->getDim1();
+		dims[1] = arr->getDim2();
+		unsigned char flatpack[dims[0]*dims[1]*3];
+		for(int i = 0; i<dims[0]; ++i){
+			for(int j =0; j<dims[1]; ++j){
+				for(int k = 0; k<3; ++k){
+				// 3D indexing: i*rows*cols + j*cols + k
+					int arg = (i*dims[1]*3) + (j*3) + k;
+					assert(arg <= sizeof(flatpack));
+					flatpack[arg] = arr->getDataElement(i,j,k);
+				}
+			}
+		}
+
+
+		// Compute our histogram
+		
+		// All-to-all gather to get histograms from other ranks
+		
+		// Determine the most similar image and report
+		
+		// Catch and report results from each other rank
 
 	}
 
