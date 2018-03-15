@@ -2,46 +2,79 @@
 #include <iostream>
 #include <string>
 #include <cassert>
+#include <cmath>
 #include "ImageReader.h"
 
 using namespace std;
 
+/*
+ * Populate destination with a normalized count of pixel weights (0-255) along dim3,
+ * representing the percentage of pixels with each weight in each color
+ * channel.  Following the convention of the Packed3DArray type, the data are
+ * packed in triplets (r1,g1,b1,r2,g2,b3...).  Note we pass by reference since
+ * heap allocation will change the address used in virtual memory
+ */
+void normalized_count(float *&dest, unsigned char *data, int dim1, int dim2){
+	dest = new float[256*3];
+	int arg;
+	float norm = dim1 * dim2;
+	
+	// Accumulate pixel value counts
+	int rcounts[256] = {0};
+	int gcounts[256] = {0};
+	int bcounts[256] = {0};
 
-// Populate destination with a normalized count of pixel weights (0-255) along dim3,
-// representing the percentage of pixels with each weight in a single color
-// channel.  Note we pass by reference since heap allocation will change the
-// address used in virtual memory
-void normalized_count(float *&dest, unsigned char *data, int dim1, int dim2, int dim3){
-	dest = new float[256];
-	int val;
-	float norm;
-	int counts[256] = {0};
-	for(int i = 0; i<dim1; ++i){
-		for(int j = 0; j<dim2; ++j){
-			val = data[i*dim2*3 + j*3 + dim3];
-			counts[val]++;
+	for(int i = 0; i < dim1; ++i){
+		for(int j = 0; j< dim2; ++j){
+			arg = i*dim2*3 + j*3;
+			rcounts[data[arg]]++;
+			gcounts[data[arg + 1]]++;
+			bcounts[data[arg + 2]]++;
 		}
 	}
-	norm = dim1*dim2;
-	float sanity = 0.0;
-	for(int k = 0; k<256; ++k){
-		dest[k] = counts[k]/norm;
-		sanity += dest[k];
+
+	// Assign normalized percentage to each pixel value, in packed order
+	// in destination array
+	for(int i = 0, j=0; i < 256; ++i, j = j + 3){
+		dest[j] = rcounts[i] / norm;
+		dest[j+1] = rcounts[i] / norm;
+		dest[j+2] = rcounts[i] / norm;
 	}
-	cout << "SANITY CHECK: channel percentage sums to " << sanity*100 << endl;
+
 }
 
-int max_report(float *data){
-	float currmax = *data;
-	int curpos = 0;
-	for(int i = 0; i<256; ++i){
-		if(data[i] > currmax){
-			currmax = data[i];
-			curpos = i;
+
+/*
+ * Compares the 256x(r,g,b) packed histogram in myHisto to the numNodes other
+ * packed histograms in otherHistos to determine the most similar image.  In
+ * this case, most similar means minimize the piecewise difference of the
+ * histogram elements.  The histogram data has 3 channels of 256 values,
+ * packed in triplets (r1,g1,b1,r2,g2,b2...).
+ */
+int compare_histos(float *&myHisto, float *&otherHistos, int myRank, int numNodes){
+	float currDiff, minDiff=10000000.0;
+	float lowRank;
+
+	lowRank = myRank == 0 ? 1:0;
+
+	// For each rank in the world...
+	for(int n = 0; n < numNodes; ++n){
+		if(n != myRank){
+			// For each of my colors
+			for(int i = 0; i<256; ++i){
+				for(int j = 0; j < 3; ++j){
+					currDiff += abs( otherHistos[n*256*3 + i*3 + j] - myHisto[i*3 + j] );
+				}
+			}
+			if(currDiff < minDiff){
+				lowRank = n;
+				minDiff = currDiff;
+			}
 		}
 	}
-	return curpos;
+	return lowRank;
 }
+
 
 int main(int argc, char **argv){
 	
@@ -71,13 +104,13 @@ int main(int argc, char **argv){
 
 
 		// Compute histograms
-		float * rchannel;
-		
-		normalized_count(rchannel, rawData, dims[0], dims[1], 0);
-		int maxpos = max_report(rchannel);
-		cout << "NODE " << rank << " red channel has highest percentage of " << rchannel[maxpos] << " at value " << maxpos << endl;
+		float *channels;
+		normalized_count(channels, rawData, dims[0], dims[1]);
 
 		// All-to-all gather to get results from other ranks
+		// Declare a buffer big enough for everything
+		float histos[256*3*numNodes];
+		MPI_Allgather(channels, 256*3, MPI_FLOAT, histos, 256*3, MPI_FLOAT, MPI_COMM_WORLD);
 
 		// Determine the most similar rank, and report back to rank 0
 
@@ -101,15 +134,13 @@ int main(int argc, char **argv){
 			dims[1] = arr->getDim2();
 			MPI_Isend(dims, 2, MPI_INT, n, 0, MPI_COMM_WORLD, &rq);
 
-			cout << "Root flattening image..." << endl;
-
 			// Flatten the data for transit
 			unsigned char flatpack[dims[0]*dims[1]*3];
 			for(int i = 0; i<dims[0]; ++i){
 				for(int j =0; j<dims[1]; ++j){
 					for(int k = 0; k<3; ++k){
 					// 3D indexing: i*rows*cols + j*cols + k
-						int arg = (i*dims[1]*3) + (j*3) + k;
+						size_t arg = (i*dims[1]*3) + (j*3) + k;
 						assert(arg <= sizeof(flatpack));
 						flatpack[arg] = arr->getDataElement(i,j,k);
 					}
@@ -132,7 +163,7 @@ int main(int argc, char **argv){
 			for(int j =0; j<dims[1]; ++j){
 				for(int k = 0; k<3; ++k){
 				// 3D indexing: i*rows*cols + j*cols + k
-					int arg = (i*dims[1]*3) + (j*3) + k;
+					size_t arg = (i*dims[1]*3) + (j*3) + k;
 					assert(arg <= sizeof(flatpack));
 					flatpack[arg] = arr->getDataElement(i,j,k);
 				}
@@ -141,9 +172,14 @@ int main(int argc, char **argv){
 
 
 		// Compute our histogram
-		
+		float *channels;
+		normalized_count(channels, flatpack, dims[0], dims[1]);	
+
 		// All-to-all gather to get histograms from other ranks
-		
+		// Declare a buffer big enough for everything
+		float histos[256*3*numNodes];
+		MPI_Allgather(channels, 256*3, MPI_FLOAT, histos, 256*3, MPI_FLOAT, MPI_COMM_WORLD);
+
 		// Determine the most similar image and report
 		
 		// Catch and report results from each other rank
