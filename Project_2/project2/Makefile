@@ -26,7 +26,7 @@ test1:
 	mpirun -N 3 main $(TEST1)
 
 test2:
-	mpirun -N 3 valgrind ./main $(TEST2)
+	mpirun -N 3 main $(TEST2)
 
 test3:
 	mpirun -N 2 main $(TEST3)
@@ -38,7 +38,7 @@ test5:
 	mpirun -N 4 main $(TEST5)
 
 test6:
-	mpirun -N 12 valgrind ./main $(TEST6)
+	mpirun -N 12 main $(TEST6)
 
 clean:
 	$(RM) *.o

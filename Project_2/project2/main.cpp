@@ -343,13 +343,15 @@ int main(int argc, char **argv){
 		// Use blocking since we need everyone to be done before we
 		// start to compare
 		// Declare a buffer big enough for everything
-		float *histos = new float[256*3*numNodes];
+		float histos[256*3*numNodes];
 		
 		// fill in my data
 		for(int i = 0; i<256*3; ++i){
 			histos[256*3*rank + i] = channels[i];
 		}
-		
+	
+		cout << "NODE " << rank << ": starting gather..." << endl;
+
 		MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, histos, 256*3, MPI_FLOAT, MPI_COMM_WORLD);
 
 		// Without in place MPI_Allgather(channels, 256*3, MPI_FLOAT, histos, 256*3, MPI_FLOAT, MPI_COMM_WORLD);
@@ -370,7 +372,6 @@ int main(int argc, char **argv){
 
 		// Clean up
 		delete [] channels;
-		delete [] histos;
 		delete [] rawData;
 
 
@@ -424,9 +425,12 @@ int main(int argc, char **argv){
 
 
 
-			// Fire it off to the appropriate node, no need to
-			// wait around to make sure it got there
-			MPI_Isend(flatpack, dims[0]*dims[1]*3, MPI_INT, n, DATA_MSG_TAG, MPI_COMM_WORLD, &rq);
+			// Fire it off to the appropriate node.  Since it is
+			// on the heap, use blocking to make sure it gets
+			// there before deleting it.
+
+			MPI_Send(flatpack, dims[0]*dims[1]*3, MPI_INT, n, DATA_MSG_TAG, MPI_COMM_WORLD);
+			//MPI_Isend(flatpack, dims[0]*dims[1]*3, MPI_INT, n, DATA_MSG_TAG, MPI_COMM_WORLD, &rq);
 
 			delete [] flatpack;
 		}
@@ -453,19 +457,20 @@ int main(int argc, char **argv){
 		float *channels = histogram(flatpack, dims[0], dims[1], 0);
 		//normalized_count(channels, flatpack, dims[0], dims[1]);
 		
-		delete [] flatpack;
 #if DEBUG
 		dump(string_format("NODE_%d_CHANNELS.txt", 0), channels);
 #endif
 		// All-to-all gather to get histograms from other ranks
 		// Declare a buffer big enough for everything
-		float *histos = new float[256*3*numNodes];
+		float histos[256*3*numNodes];
 
 		// Copy my data into the appropriate area (since local work is
 		// less expensive than communication)
 		for(int i = 0; i<256*3; ++i){
 			histos[i] = channels[i];
 		}
+		
+		cout << "ROOT: starting gather..." << endl;
 
 		MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, histos, 256*3, MPI_FLOAT, MPI_COMM_WORLD);
 		//   Without in place: MPI_Allgather(channels, 256*3, MPI_FLOAT, histos, 256*3, MPI_FLOAT, MPI_COMM_WORLD);
@@ -483,8 +488,8 @@ int main(int argc, char **argv){
 		
 
 		// Clean up
-		delete [] histos;
 		delete [] channels;
+		delete [] flatpack;
 	}
 
 	
