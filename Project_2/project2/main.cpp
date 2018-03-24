@@ -9,7 +9,7 @@
 #include <fstream>
 #define DIMS_MSG_TAG 0
 #define DATA_MSG_TAG 1
-#define DEBUG 1
+#define DEBUG 0
 
 using namespace std;
 
@@ -38,6 +38,18 @@ void dump(string fname, float *data){
 	if(chan.good()){
 		for(int i = 0; i<256*3; i+=3){
 			chan << i/3 << ": (" << data[i] << "," << data[i+1] << "," << data[i+2] << ")" << endl;
+		}
+		chan.close();
+	}
+}
+
+// dumps serialized counts
+void serial_dump(string fname, int *data, int len){
+	cout << "DUMPING..." << endl;
+	ofstream chan(fname);
+	if(chan.good()){
+		for(int i = 0; i<len; i+=3){
+			chan << i/3 << ":" << "(" << data[i] << "," << data[i+1] << "," << data[i+2] << ")" << endl;
 		}
 		chan.close();
 	}
@@ -134,21 +146,51 @@ int * count(int *data, int dim1, int dim2, int dim3){
 }	
 */
 
+void check_bounds(int n, int i, int j, int dim1, int dim2){
+	if(n < 0 || n >= 256){
+		cerr 	<< "ERROR: arg is " << n << ", i is " << i
+			<< ", j is " << j << ", dim1 is " << dim1
+			<< ", dim2 is " << dim2 << endl;
+		assert(0);
+			
+	}
+}
+
 float * histogram(int *data, int dim1, int dim2, int rank){
 	float* ret = new float[256*3];
-	int arg;
+	int arg = 0;
 	int red[256] = {0};
 	int green[256] = {0};
 	int blue[256] = {0};
+
+	for(int i = 0; i<dim1*dim2; i+=3){
+		red[ data[arg] ]++;
+		blue[ data[arg+1] ]++;
+		green[ data[arg+2] ]++;
+	}
+
+	/*
+	for(int i = 0; i<256*3; i+=3){
+		red[ data[i] ]++;
+		green[ data[i + 1] ]++;
+		blue[ data[i + 2 ] ]++;
+	}
+	*/
+
+	/*
 	for(int i = 0; i<dim1; ++i){
 		for(int j = 0; j<dim2; ++j){
+			check_bounds(data[arg], i, j, dim1, dim2);
+			check_bounds(data[arg+1], i, j, dim1, dim2);
+			check_bounds(data[arg+2], i, j, dim1, dim2);
+
 			arg = i*dim2*3 + j*3;
 			red[ data[arg] ]++;
 			green[ data[arg+1] ]++;
 			blue[ data[arg+2] ]++;
 		}
 	}
-
+	*/
 
 	//red = count(data, dim1, dim2, 0);
 	//green = count(data, dim1, dim2, 1);
@@ -275,18 +317,19 @@ int main(int argc, char **argv){
 		// Wait for dimensions information in a tag 0 message
 		MPI_Recv(dims, 2, MPI_INT, 0, DIMS_MSG_TAG, MPI_COMM_WORLD, &status);
 		cout << "NODE " << rank << ": dimensions: (" << dims[0] << "," << dims[1] << ")" << endl;
-			
-		int rawData[dims[0]*dims[1]*3];
-
-		cout << "NODE " << rank << ": catching data of size " << dims[0]*dims[1]*3*sizeof(int) << endl;
-		cout << "NODE " << rank << ": size of destination in bytes: " << sizeof(rawData) << endl;
-
+		
+		// On heap since stack will overflow for many images
+		int *rawData = new int[dims[0]*dims[1]*3];
 
 		// Wait for image data in a tag 1 message
 		MPI_Recv(rawData, dims[0]*dims[1]*3, MPI_INT, 0, DATA_MSG_TAG, MPI_COMM_WORLD, &status);
 
 		cout << "NODE " << rank << ": got image with " << dims[0]*dims[1] << " pixels..." << endl;
+#if DEBUG
+		serial_dump(string_format("node_%d_after.txt", rank), rawData, dims[0]*dims[1]);
+#endif
 
+		cout << "NODE " << rank << ": computing histogram..." << endl;
 
 		// Compute histograms
 		float *channels = histogram(rawData, dims[0], dims[1], rank);
@@ -300,7 +343,7 @@ int main(int argc, char **argv){
 		// Use blocking since we need everyone to be done before we
 		// start to compare
 		// Declare a buffer big enough for everything
-		float histos[256*3*numNodes];
+		float *histos = new float[256*3*numNodes];
 		
 		// fill in my data
 		for(int i = 0; i<256*3; ++i){
@@ -327,6 +370,8 @@ int main(int argc, char **argv){
 
 		// Clean up
 		delete [] channels;
+		delete [] histos;
+		delete [] rawData;
 
 
 	}
@@ -349,7 +394,8 @@ int main(int argc, char **argv){
 			MPI_Isend(dims, 2, MPI_INT, n, DIMS_MSG_TAG, MPI_COMM_WORLD, &rq);
 
 			// Flatten the data for transit
-			int flatpack[dims[0]*dims[1]*3];
+			// Use heap since the image may be large
+			int *flatpack = new int[dims[0]*dims[1]*3];
 			for(int i = 0; i<dims[0]; ++i){
 				for(int j =0; j<dims[1]; ++j){
 					for(int k = 0; k<3; ++k){
@@ -359,9 +405,9 @@ int main(int argc, char **argv){
 					}
 				}
 			}
-
-/*
 #if DEBUG
+			serial_dump(string_format("node_%d_before.txt", n), flatpack, dims[0]*dims[1]);
+/*
 			int *red, *green, *blue;
 			red = count(flatpack, dims[0], dims[1], 0);
 			green = count(flatpack, dims[0], dims[1], 1);
@@ -372,12 +418,17 @@ int main(int argc, char **argv){
 			delete []red;
 			delete []green;
 			delete []blue;
-#endif
 */
+
+#endif
+
+
 
 			// Fire it off to the appropriate node, no need to
 			// wait around to make sure it got there
 			MPI_Isend(flatpack, dims[0]*dims[1]*3, MPI_INT, n, DATA_MSG_TAG, MPI_COMM_WORLD, &rq);
+
+			delete [] flatpack;
 		}
 
 		// Do our work while the rest complete
@@ -387,7 +438,7 @@ int main(int argc, char **argv){
 		arr = ir->getInternalPacked3DArrayImage();
 		dims[0] = arr->getDim1();
 		dims[1] = arr->getDim2();
-		int flatpack[dims[0]*dims[1]*3];
+		int *flatpack = new int[dims[0]*dims[1]*3];
 		for(int i = 0; i<dims[0]; ++i){
 			for(int j =0; j<dims[1]; ++j){
 				for(int k = 0; k<3; ++k){
@@ -398,16 +449,17 @@ int main(int argc, char **argv){
 			}
 		}
 
-
 		// Compute our histogram
 		float *channels = histogram(flatpack, dims[0], dims[1], 0);
-		//normalized_count(channels, flatpack, dims[0], dims[1]);	
+		//normalized_count(channels, flatpack, dims[0], dims[1]);
+		
+		delete [] flatpack;
 #if DEBUG
 		dump(string_format("NODE_%d_CHANNELS.txt", 0), channels);
 #endif
 		// All-to-all gather to get histograms from other ranks
 		// Declare a buffer big enough for everything
-		float histos[256*3*numNodes];
+		float *histos = new float[256*3*numNodes];
 
 		// Copy my data into the appropriate area (since local work is
 		// less expensive than communication)
@@ -431,8 +483,8 @@ int main(int argc, char **argv){
 		
 
 		// Clean up
+		delete [] histos;
 		delete [] channels;
-
 	}
 
 	
