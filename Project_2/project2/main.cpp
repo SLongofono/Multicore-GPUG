@@ -4,9 +4,10 @@
 #include <cassert>
 #include <cmath>
 #include "ImageReader.h"
-#include <cstdio>
-#include <memory>
-#include <fstream>
+#include <cstdio>	// for string_format()
+#include <memory>	// for string_format()
+#include <fstream>	// for dump()
+
 #define DIMS_MSG_TAG 0
 #define DATA_MSG_TAG 1
 #define DEBUG 0
@@ -94,57 +95,6 @@ void dump(int rank, float *channels){
 	}
 }
 
-void stats(int rank, float *channels){
-	// Compute some stats for debugging purposes
-	float rsum, gsum, bsum, rmax, gmax, bmax, rmin, gmin, bmin, rval, gval, bval;
-	int rmaxpos, gmaxpos, bmaxpos, rminpos, gminpos, bminpos;
-	rmaxpos = gmaxpos = bmaxpos = rminpos = gminpos = bminpos = 0;
-	rsum = bsum = gsum = rmax = gmax = bmax = 0.0;
-	rmin = gmin = bmin = 2;
-	for(int triplet = 0; triplet < 256*3; triplet += 3){
-		rval = channels[triplet];
-		gval = channels[triplet + 1];
-		bval = channels[triplet + 2];
-
-		rsum += rval;
-		gsum += gval;
-		bsum += bval;
-
-		if(rval < rmin){ rmin = rval; rminpos = triplet/3;}
-		if(gval < gmin){ gmin = gval; gminpos = triplet/3;}
-		if(bval < bmin){ bmin = bval; bminpos = triplet/3;}
-
-		if(rval > rmax){ rmax = rval; rmaxpos = triplet/3;}
-		if(gval > gmax){ gmax = gval; gmaxpos = triplet/3;}
-		if(bval > bmax){ bmax = bval; bmaxpos = triplet/3;}
-		
-	}
-
-	cout 	<< "NODE " << rank << ":" << endl << '\t'
-		<< "Sums: " << "(" << rsum << " " << gsum << " " << bsum << ")" << endl <<'\t'
-		<< "Maxs: " << "(" << rmaxpos << " " << gmaxpos << " " << bmaxpos << ")" << endl <<'\t'
-		<< "Mins: " << "(" << rminpos << " " << gminpos << " " << bminpos << ")" << endl;
-
-}
-
-/*
-int * count(int *data, int dim1, int dim2, int dim3){
-	int *ret = new int[256]();
-
-	for(int i = 0; i<256; ++i){
-		assert(ret[i] == 0);
-	}
-
-	int arg;
-	for(int i = 0; i<dim1; ++i){
-		for(int j = 0; j<dim2; ++j){
-			arg = i*dim2*3 + j*3 + dim3;
-			ret[data[arg]]++;
-		}
-	}
-	return ret;
-}	
-*/
 
 void check_bounds(int n, int i, int j, int dim1, int dim2){
 	if(n < 0 || n >= 256){
@@ -155,6 +105,7 @@ void check_bounds(int n, int i, int j, int dim1, int dim2){
 			
 	}
 }
+
 
 float * histogram(int *data, int dim1, int dim2, int rank){
 	float* ret = new float[256*3];
@@ -169,32 +120,6 @@ float * histogram(int *data, int dim1, int dim2, int rank){
 		green[ data[arg+2] ]++;
 	}
 
-	/*
-	for(int i = 0; i<256*3; i+=3){
-		red[ data[i] ]++;
-		green[ data[i + 1] ]++;
-		blue[ data[i + 2 ] ]++;
-	}
-	*/
-
-	/*
-	for(int i = 0; i<dim1; ++i){
-		for(int j = 0; j<dim2; ++j){
-			check_bounds(data[arg], i, j, dim1, dim2);
-			check_bounds(data[arg+1], i, j, dim1, dim2);
-			check_bounds(data[arg+2], i, j, dim1, dim2);
-
-			arg = i*dim2*3 + j*3;
-			red[ data[arg] ]++;
-			green[ data[arg+1] ]++;
-			blue[ data[arg+2] ]++;
-		}
-	}
-	*/
-
-	//red = count(data, dim1, dim2, 0);
-	//green = count(data, dim1, dim2, 1);
-	//blue = count(data, dim1, dim2, 2);
 #if DEBUG
 	dump(rank, red, 0);
 	dump(rank, green, 1);
@@ -211,60 +136,10 @@ float * histogram(int *data, int dim1, int dim2, int rank){
 		arg += 3;
 	}
 	
-
-	/*	
-	for(int i=0, j=0; i<256; ++i, j +=3){
-		ret[j] = red[i]*norm;
-		ret[j+1] = green[i]*norm;
-		ret[j+2] = blue[i]*norm;
-	}
-	*/
-
-	//delete [] red;
-	//delete [] green;
-	//delete [] blue;
-
 	return ret;
 	
 }
 
-/*
- * Populate destination with a normalized count of pixel weights (0-255) along dim3,
- * representing the percentage of pixels with each weight in each color
- * channel.  Following the convention of the Packed3DArray type, the data are
- * packed in triplets (r1,g1,b1,r2,g2,b3...).  Note we pass by reference since
- * heap allocation will change the address used in virtual memory
- */
-/*
-void normalized_count(float *&dest, int *data, int dim1, int dim2){
-	dest = new float[256*3];
-	int arg;
-	float norm = 1.0/(dim1 * dim2);
-	
-	// Accumulate pixel value counts
-	int rcounts[256] = {0};
-	int gcounts[256] = {0};
-	int bcounts[256] = {0};
-
-	for(int i = 0; i < dim1; ++i){
-		for(int j = 0; j< dim2; ++j){
-			arg = i*dim2*3 + j*3;
-			rcounts[(int)data[arg]]++;
-			gcounts[(int)data[arg + 1]]++;
-			bcounts[(int)data[arg + 2]]++;
-		}
-	}
-
-	// Assign normalized percentage to each pixel value, in packed order
-	// in destination array
-	for(int i = 0, j=0; i < 256; ++i, j = j + 3){
-		dest[j] = rcounts[i] * norm;
-		dest[j+1] = gcounts[i] * norm;
-		dest[j+2] = bcounts[i] * norm;
-	}
-
-}
-*/
 
 /*
  * Compares the 256x(r,g,b) packed histogram in myHisto to the numNodes other
@@ -408,19 +283,6 @@ int main(int argc, char **argv){
 			}
 #if DEBUG
 			serial_dump(string_format("node_%d_before.txt", n), flatpack, dims[0]*dims[1]);
-/*
-			int *red, *green, *blue;
-			red = count(flatpack, dims[0], dims[1], 0);
-			green = count(flatpack, dims[0], dims[1], 1);
-			blue = count(flatpack, dims[0], dims[1], 2);
-			dump(100+n, red, 0);
-			dump(100+n, green, 1);
-			dump(100+n, blue, 2);
-			delete []red;
-			delete []green;
-			delete []blue;
-*/
-
 #endif
 
 
