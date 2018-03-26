@@ -8,6 +8,7 @@ TEST3=images/R1G255B1.png images/R1G255B1.png
 TEST4=images/RED_PIXEL.png images/GREEN_PIXEL.png images/BLUE_PIXEL.png
 TEST5=images/pure_green.png images/R1G255B1.png images/pure_red.png images/pure_red.png
 TEST6=images/b1.jpg images/b2.jpg images/b3.jpg images/g1.jpg images/g2.jpg images/g3.jpg images/k1.jpg images/k2.jpg images/k3.jpg images/r1.jpg images/r2.jpg images/r3.jpg
+TEST7=images/b1.jpg images/b2.jpg images/b3.jpg images/b1.jpg images/b2.jpg images/b3.jpg
 OBJS=main.o ../lib/libCOGLImageReader.so
 
 main: main.o ../lib/libCOGLImageReader.so
@@ -39,6 +40,9 @@ test5:
 
 test6:
 	mpirun -N 12 main $(TEST6)
+
+test7:
+	mpirun -N 6 main $(TEST7)
 
 clean:
 	$(RM) *.o

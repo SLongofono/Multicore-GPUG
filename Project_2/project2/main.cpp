@@ -109,21 +109,26 @@ void check_bounds(int n, int i, int j, int dim1, int dim2){
 
 float * histogram(int *data, int dim1, int dim2, int rank){
 	float* ret = new float[256*3];
-	int arg = 0;
+	int arg;
 	int red[256] = {0};
 	int green[256] = {0};
 	int blue[256] = {0};
 
-	for(int i = 0; i<dim1*dim2; i+=3){
-		red[ data[arg] ]++;
-		blue[ data[arg+1] ]++;
-		green[ data[arg+2] ]++;
+	for(int i = 0; i<dim1*dim2*3; i+=3){
+		red[ data[i] ]++;
+		blue[ data[i+1] ]++;
+		green[ data[i+2] ]++;
 	}
 
 #if DEBUG
 	dump(rank, red, 0);
 	dump(rank, green, 1);
 	dump(rank, blue, 2);
+	int sum = 0;
+	for(int i = 0; i<256; ++i){
+		sum += red[i];
+	}
+	assert(sum == dim1*dim2);
 #endif
 	float norm = 1.0/(dim1*dim2);
 
@@ -135,7 +140,26 @@ float * histogram(int *data, int dim1, int dim2, int rank){
 		ret[arg + 2] = norm * blue[j];
 		arg += 3;
 	}
-	
+#if DEBUG
+	// Ensure this is a percentage
+	float rsum, gsum, bsum;
+	rsum=gsum=bsum=0.0;
+	for(int i = 0; i<256*3; i+=3){
+		rsum += ret[i];
+		gsum += ret[i+1];
+		bsum += ret[i+2];
+	}
+	if(rsum <= 0.9999 || rsum > 1.0001){
+		cout << "[ error ] NODE " << rank << ": red percentages sum to " << rsum << endl;
+	}
+	if(gsum <= 0.9999 || gsum > 1.0001){
+		cout << "[ error ] NODE " << rank << ": green percentages sum to " << gsum << endl;
+		
+	}
+	if(bsum <= 0.9999 || bsum > 1.0001){
+		cout << "[ error ] NODE " << rank << ": blue percentages sum to " << bsum << endl;
+	}
+#endif
 	return ret;
 	
 }
@@ -146,7 +170,7 @@ float * histogram(int *data, int dim1, int dim2, int rank){
  * packed histograms in otherHistos to determine the most similar image.  In
  * this case, most similar means minimize the piecewise difference of the
  * histogram elements.  The histogram data has 3 channels of 256 values,
- * packed in triplets (r1,g1,b1,r2,g2,b2...).
+ * packed in triplets (r0,g0,b0,r1,g1,b1,r2,g2,b2...).
  */
 int compare_histos(float *myHisto, float *otherHistos, int myRank, int numNodes){
 	float currDiff = 0.0;
@@ -157,6 +181,30 @@ int compare_histos(float *myHisto, float *otherHistos, int myRank, int numNodes)
 
 	// For each rank in the world...
 	for(int n = 0; n < numNodes; ++n){
+
+#if DEBUG
+		// verify that we still have a percentage
+		float rsum, gsum, bsum;
+		rsum=gsum=bsum=0.0;
+		for(int i = 0; i<256*3; i+=3){
+			rsum += myHisto[i];
+			gsum += myHisto[i+1];
+			bsum += myHisto[i+2];
+		}
+		if(rsum <= 0.9999 || rsum > 1.0001){
+			cout << "[ error ] NODE " << myRank << ": red percentages sum to " << rsum << endl;
+			assert(0);
+		}
+		if(gsum <= 0.9999 || gsum > 1.0001){
+			cout << "[ error ] NODE " << myRank << ": green percentages sum to " << gsum << endl;	
+			assert(0);
+		}
+		if(bsum <= 0.9999 || bsum > 1.0001){
+			cout << "[ error ] NODE " << myRank << ": blue percentages sum to " << bsum << endl;
+			assert(0);
+		}
+#endif
+
 		currDiff = 0.0;
 		if(n != myRank){
 			// Since they are all packed the same way, compare
