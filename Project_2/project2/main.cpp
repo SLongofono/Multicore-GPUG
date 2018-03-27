@@ -7,7 +7,7 @@
 
 #define DIMS_MSG_TAG 0
 #define DATA_MSG_TAG 1
-#define DEBUG 1
+#define DEBUG 0
 
 using namespace std;
 
