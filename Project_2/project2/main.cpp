@@ -288,14 +288,18 @@ int main(int argc, char **argv){
 
 #endif
 
-		// Determine the most similar rank, and report back to rank 0
-		
+		// Determine the most similar rank
 		int closest = compare_histos(channels, histos, rank, numNodes);
-		cout << "NODE " << rank << ": most similar to NODE " << closest << endl;
+
+		// Report closest image back to root.  Need to wait so data
+		// still exists
+		MPI_Gather(&closest, 1, MPI_INT, nullptr, 0, MPI_DATATYPE_NULL, 0, MPI_COMM_WORLD);
 
 		// Clean up
 		delete [] channels;
 		delete [] rawData;
+
+		
 
 
 	}
@@ -390,12 +394,20 @@ int main(int argc, char **argv){
 			assert(channels[i] == histos[i + rank*256*3]);
 		}
 
-		// Determine the most similar image and report
-		int closest = compare_histos(channels, histos, rank, numNodes);
-		cout << "NODE " << rank << ": most similar to NODE " << closest << endl;
-		
+		// Declare buffer to catch results
+		int results[numNodes];
+
+		// Determine the most similar image and fill in root results
+		results[0] = compare_histos(channels, histos, rank, numNodes);
+
 		// Catch and report results from each other rank
-		
+		// Do so in a blocking fashon, since we need to report results
+		// to the user
+		MPI_Gather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, results, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+		for(int i = 0; i<numNodes; ++i){
+			cout << "NODE " << i << ": most similar to NODE " << results[i] << endl;
+		}
 
 		// Clean up
 		delete [] channels;
