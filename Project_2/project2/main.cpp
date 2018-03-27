@@ -4,25 +4,23 @@
 #include <cassert>
 #include <cmath>
 #include "ImageReader.h"
+
+#define DIMS_MSG_TAG 0
+#define DATA_MSG_TAG 1
+#define DEBUG 1
+
+using namespace std;
+
+#if DEBUG
+
 #include <cstdio>	// for string_format()
 #include <memory>	// for string_format()
 #include <fstream>	// for dump()
 
-#define DIMS_MSG_TAG 0
-#define DATA_MSG_TAG 1
-#define DEBUG 0
 
-using namespace std;
-
-// For testing only
-
-#if DEBUG
-#define COUNT 0
-#endif
-
-#define TEST4 1
-
-
+// Realizes sprintf() since C++ insists on making standard things complicated
+// Thanks to stackOverflow user IFreilicht for this workaround.
+// https://stackoverflow.com/questions/2342162/stdstring-formatting-like-sprintf
 template<typename ... Args>
 string string_format( const std::string& format, Args ... args )
 {
@@ -33,7 +31,7 @@ string string_format( const std::string& format, Args ... args )
 }
 
 
-// dumps packed counts
+// dumps packed channel percentages to a predefined filename
 void dump(string fname, float *data){
 	ofstream chan(fname);
 	if(chan.good()){
@@ -78,24 +76,6 @@ void dump(int rank, int *data, int color){
 	}
 }
 
-// dumps channels
-void dump(int rank, float *channels){
-	ofstream rchan(string_format("node_%d_red.txt", rank));
-	ofstream gchan(string_format("node_%d_green.txt", rank));
-	ofstream bchan(string_format("node_%d_blue.txt", rank));
-	if(rchan.good() && gchan.good() && bchan.good()){
-		for(int i = 0; i<256*3; i += 3){
-			rchan << channels[i] << endl;
-			gchan << channels[i + 1] << endl;
-			bchan << channels[i + 2] << endl;
-		}
-		rchan.close();
-		gchan.close();
-		bchan.close();
-	}
-}
-
-
 void check_bounds(int n, int i, int j, int dim1, int dim2){
 	if(n < 0 || n >= 256){
 		cerr 	<< "ERROR: arg is " << n << ", i is " << i
@@ -106,7 +86,14 @@ void check_bounds(int n, int i, int j, int dim1, int dim2){
 	}
 }
 
+#endif
 
+
+/*
+ * Computes a histogram representing the percentage of pixels at each of the
+ * 256 possible color values.  Uses the packing convention
+ *     (r0,g0,b0,r1,g1,b1...) to represent the three color channels
+ */
 float * histogram(int *data, int dim1, int dim2, int rank){
 	float* ret = new float[256*3];
 	int arg;
@@ -239,7 +226,6 @@ int main(int argc, char **argv){
 
 		// Wait for dimensions information in a tag 0 message
 		MPI_Recv(dims, 2, MPI_INT, 0, DIMS_MSG_TAG, MPI_COMM_WORLD, &status);
-		cout << "NODE " << rank << ": dimensions: (" << dims[0] << "," << dims[1] << ")" << endl;
 		
 		// On heap since stack will overflow for many images
 		int *rawData = new int[dims[0]*dims[1]*3];
@@ -247,12 +233,13 @@ int main(int argc, char **argv){
 		// Wait for image data in a tag 1 message
 		MPI_Recv(rawData, dims[0]*dims[1]*3, MPI_INT, 0, DATA_MSG_TAG, MPI_COMM_WORLD, &status);
 
-		cout << "NODE " << rank << ": got image with " << dims[0]*dims[1] << " pixels..." << endl;
 #if DEBUG
+		cout << "NODE " << rank << ": dimensions: (" << dims[0] << "," << dims[1] << ")" << endl;
+		cout << "NODE " << rank << ": got image with " << dims[0]*dims[1] << " pixels..." << endl;
 		serial_dump(string_format("node_%d_after.txt", rank), rawData, dims[0]*dims[1]);
+		cout << "NODE " << rank << ": computing histogram..." << endl;
 #endif
 
-		cout << "NODE " << rank << ": computing histogram..." << endl;
 
 		// Compute histograms
 		float *channels = histogram(rawData, dims[0], dims[1], rank);
@@ -273,10 +260,7 @@ int main(int argc, char **argv){
 			histos[256*3*rank + i] = channels[i];
 		}
 	
-		cout << "NODE " << rank << ": starting gather..." << endl;
-
 		MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, histos, 256*3, MPI_FLOAT, MPI_COMM_WORLD);
-
 		// Without in place MPI_Allgather(channels, 256*3, MPI_FLOAT, histos, 256*3, MPI_FLOAT, MPI_COMM_WORLD);
 
 #if DEBUG
@@ -384,15 +368,15 @@ int main(int argc, char **argv){
 			histos[i] = channels[i];
 		}
 		
-		cout << "ROOT: starting gather..." << endl;
-
 		MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, histos, 256*3, MPI_FLOAT, MPI_COMM_WORLD);
 		//   Without in place: MPI_Allgather(channels, 256*3, MPI_FLOAT, histos, 256*3, MPI_FLOAT, MPI_COMM_WORLD);
 
+#if DEBUG
 		// Sanity check: my data should be at rank*256*3
 		for(int i = 0; i<256*3; ++i){
 			assert(channels[i] == histos[i + rank*256*3]);
 		}
+#endif
 
 		// Declare buffer to catch results
 		int results[numNodes];
