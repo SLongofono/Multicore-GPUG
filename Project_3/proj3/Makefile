@@ -1,8 +1,7 @@
 CPP=g++
 CFLAGS=-g -std=c++11 -Wall
 INCL=../ImageWriter
-SODIR=../lib/OGL
-OBJS=main.o $(SODIR)/libCOGLImageWriter.so
+OBJS=main.o ../lib/libCOGLImageWriter.so
 IMAGE1=256 256 256 ../voxeldata/aneurism.raw
 IMAGE2=256 256 256 ../voxeldata/bonsai.raw
 IMAGE3=256 256 178 ../voxeldata/BostonTeapot.raw
@@ -21,7 +20,8 @@ IMAGE15=256 256 256 ../voxeldata/skull.raw
 IMAGE16=341 341 93 ../voxeldata/statueLeg.raw
 IMAGE17=512 512 174 ../voxeldata/bonsai.raw
 
-project3: main.o
+project3: main.o ../lib/libCOGLImageWriter.so
+	$(MAKE) -C ../ImageWriter
 	$(CPP) $(CFLAGS) $(OBJS) -o $@
 
 main.o:	main.cpp 
