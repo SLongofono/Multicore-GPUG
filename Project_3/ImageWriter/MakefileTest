@@ -1,16 +1,14 @@
-# PROG = testWriter2
+PROG = testWriter
 
 CPP = g++ -fPIC
 LINK = g++ -fPIC
 
-INC1 = -I$(BUILD_BASE)/include/cryph -I$(BUILD_BASE)/include/OGL
-INC2 = $(OGL_INC_LOC)
-CFLAGS = -g -c $(INC1) $(INC2)
+CFLAGS = -c
 
-LIB1 = $(BUILD_BASE)/lib/OGL/libCOGLImageWriter.so $(BUILD_BASE)/lib/cryph/libPVM.so
+LIB = libCOGLImageWriter.so
 
 $(PROG): $(PROG).o
-	$(LINK) -g -o $(PROG) $(PROG).o $(LIB1)
+	$(LINK) -g -o $(PROG) $(PROG).o $(LIB)
 
 $(PROG).o: $(PROG).c++
 	$(CPP) $(CFLAGS) $(PROG).c++
