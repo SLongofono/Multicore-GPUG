@@ -33,11 +33,12 @@ int main(int argc, char **argv){
 		return -1;
 	}
 
-	int nRows, nCols, nSheets, nVals;
+	int nRows, nCols, nSheets, nVals, projection;
 	std::string fileType(".png");
 	nRows = atoi(argv[1]);
 	nCols = atoi(argv[2]);
 	nSheets = atoi(argv[3]);
+	projection = atoi(argv[5]);
 	nVals = nRows * nCols * nSheets;
 	unsigned char *rawImageData = new unsigned char[nVals];	
 	ifstream infile(argv[4]);

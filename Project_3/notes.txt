@@ -1,0 +1,25 @@
+Basic Premise
+
+We are reading in 3D image data (voxels) and outputting 2d images (pixels)
+
+As such, we need to collapse one dimension.  In cartesian coordinates, we wish
+to project Z onto the XY plane, Y onto the XZ plane, or X onto the YZ plane
+
+There are many ways we can do this, but this specific project wants us to
+create two separate projections for any given run: one which takes the sum of
+values along the collapsed dimension, and one that takes the maximum of the
+values along the collapsed dimension.
+
+For example, say we have a 4x4x4 image, interpreted as x, y, and t.  We wish
+to plot the maximum intensity at each pixel in the 2D image represented by
+pairs (x,y).  So, for each pair (x,y), we iterate over all 4 values in the
+third dimension t, and assign the maximum of all these values.  So given these
+slices, each representing a different value of t:
+
+t=0   t=1   t=2   t=3             composite projection
+0000  0100  0210  0053   ----->   0253 
+0000  0100  0210  0000   yields   0210 
+0000  0100  0210  0800   ----->   0810 
+0000  0100  0000  4001            4101
+
+
