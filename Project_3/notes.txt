@@ -6,9 +6,9 @@ As such, we need to collapse one dimension.  In cartesian coordinates, we wish
 to project Z onto the XY plane, Y onto the XZ plane, or X onto the YZ plane
 
 There are many ways we can do this, but this specific project wants us to
-create two separate projections for any given run: one which takes the sum of
-values along the collapsed dimension, and one that takes the maximum of the
-values along the collapsed dimension.
+create two separate projections for any given run: one which takes a sort of
+weighted sum of values along the collapsed dimension, and one that takes the
+maximum of the values along the collapsed dimension.
 
 For example, say we have a 4x4x4 image, interpreted as x, y, and t.  We wish
 to plot the maximum intensity at each pixel in the 2D image represented by
@@ -21,5 +21,29 @@ t=0   t=1   t=2   t=3             composite projection
 0000  0100  0210  0000   yields   0210 
 0000  0100  0210  0800   ----->   0810 
 0000  0100  0000  4001            4101
+
+For the sum approach, we need at least two kernel calls.  The first will go
+through each pixel in the resultant image, and computed a weighted sum.  The
+weighting is determined by the distance from the start; the value of the
+zeroth element is scaled by (0+1)/N, and the jth element by (j+1)/N.
+Depending on how we traverse the collapsed dimension, this will either favor
+the nearest or the farthest values along the traversal.  This is a hacky way
+of simulating how a signal might be attenuated as it moves through space.  As
+we perform the above process, maintain a record of the largest sum among the
+pixels/collapsed dimensions.  Before writing the image, each pixel float value
+is normalized to this maximum intensity, and then mapped to the range [0,255]
+by multiplying by 255 and truncating.
+
+Using the above set as an example, weighting the furthest as smallest, we get
+the following set of weighted sums:
+
+t=0   t=1   t=2   t=3             composite projection floats
+0000  0100  0210  0053   ----->   0.00 1.67 1.58  0.75
+0000  0100  0210  0000   yields   0.00 1.67 0.33  0.00 
+0000  0100  0210  0800   ----->   0.00 3.17 0.33  0.00 
+0000  0100  0000  4001            1.00 0.50 0.00  0.25
+
+Max weighted sum: 3.17.  Thus each value is (int)(val * 255 / 3.17)
+
 
 
