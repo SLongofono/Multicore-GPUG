@@ -241,7 +241,7 @@ project3: main.o ../lib/libCOGLImageWriter.so
 	$(MAKE) -C ../ImageWriter
 	$(NVCC) $(ALL_LD_FLAGS) $(GENCODE_FLAGS) $(OBJS) -o $@ $(LIBRARIES)
 
-main.o: main.cu
+main.o: main.cu helpers.h
 	$(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
 #project3: main.o ../lib/libCOGLImageWriter.so

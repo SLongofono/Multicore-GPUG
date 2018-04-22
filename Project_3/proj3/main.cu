@@ -2,6 +2,7 @@
 #include <cassert>
 #include <fstream>
 #include "ImageWriter.h"
+#include <cuda.h>
 
 #define DEBUG 1
 
@@ -12,20 +13,6 @@ using namespace std;
 void launchMaxKernel();
 void launchSumKernel1();
 void launchSumKernel2();
-void writeFile(std::string fname, int xres, int yres, const unsigned char* imageBytes){
-	unsigned char *row = new unsigned char[3 * xres];
-	ImageWriter *writer = ImageWriter::create(fname, xres, yres);
-	int next = 0;
-	for(int r = 0; r < yres; ++r){
-		for(int c = 0; c < 3*xres; c += 3){
-			row[c] = row[c+1] = row[c+2] = imageBytes[next++];
-		}
-		writer->addScanLine(row);
-	}
-	writer->closeImageFile();
-	delete writer;
-	delete [] row;
-}
 
 int main(int argc, char **argv){
 	
@@ -80,6 +67,11 @@ int main(int argc, char **argv){
 			delete [] rawImageData;
 			return -1;
 	}
+
+#if DEBUG
+	// Dump device information
+	dumpDevices();
+#endif
 
 	/*
 	 * Spit out an image, unadulterated
