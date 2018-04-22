@@ -5,30 +5,29 @@ Due: May 3, 2018 (emailed by 11:59:59 p.m.) This is the day before Stop Day. As
 stated in the syllabus, no project will be accepted after this date under any
 circumstances.
 
---------------------------------------------------------------------------
-
-Update after class on Monday, April 16
+Updates
 You can either flip the voxel grid around based on "projectionType" before
 sending to the GPU, or send the voxel data as is and handle the different
 projection types on the GPU.
 
---------------------------------------------------------------------------
+The description below has been corrected to reflect the fact that the voxel data
+is stored in column-major ‐ not row-major – order.
+
+Sample output for some voxel files.
 
 In this project, you will read a binary file containing voxel data and create
 two images by projecting the voxels in various ways in GPU code. You may use
 either OpenCL or CUDA for this project.
 
-Recall that a voxel grid is a three-dimensional array of values. The voxel grids
-we will use in this project are 3D arrays of 8-bit bytes. You will be given the
-dimensions of a voxel grid and the name of a file containing the data in row
-major order (all voxel cells in the first row of the first sheet, then all in
-the second row of the first sheet, etc. until the first sheet is complete; then
-all voxel cells in the first row of the second sheet, etc.).
-
---------------------------------------------------------------------------
+Recall that a voxel grid is a three-dimensional array of values. The voxel
+grids we will use in this project are 3D arrays of 8-bit bytes. You will be
+given the dimensions of a voxel grid and the name of a file containing the
+data in column-major order (all voxel cells in the first column of the first
+sheet, then all in the second column of the first sheet, etc. until the first
+sheet is complete; then all voxel cells in the first column of the second sheet,
+etc.).
 
 Specific Project Requirements
-
 Your program will be launched as:
 
 ./project3 nRows nCols nSheets fileName projectionType outputFileNameBase
@@ -36,37 +35,32 @@ The projectionType parameter specifies how rows, columns, and sheets in the
 voxel image will be mapped to the x and y direction of the image. Pay close
 attention to each of the following specifications!
 
-1.	image x direction: min column to max column
-	image y direction: min row to max row
-	each pixel computed by traversing from min sheet to max sheet
-
-2.	image x direction: max column to min column
-	image y direction: min row to max row
-	each pixel computed by traversing from max sheet to min sheet
-
-3.	image x direction: min sheet to max sheet
-	image y direction: min row to max row
-	each pixel computed by traversing from min column to max column
-
-4.	image x direction: max sheet to min sheet
-	image y direction: min row to max row
-	each pixel computed by traversing from max column to min column
-
-5.	image x direction: min column to max column
-	image y direction: min sheet to max sheet
-	each pixel computed by traversing from max row to min row
-
-6.	image x direction: min column to max column
-	image y direction: max sheet to min sheet
-	each pixel computed by traversing from min row to max row
+image x direction: min column to max column
+image y direction: min row to max row
+each pixel computed by traversing from min sheet to max sheet
+image x direction: max column to min column
+image y direction: min row to max row
+each pixel computed by traversing from max sheet to min sheet
+image x direction: min sheet to max sheet
+image y direction: min row to max row
+each pixel computed by traversing from min column to max column
+image x direction: max sheet to min sheet
+image y direction: min row to max row
+each pixel computed by traversing from max column to min column
+image x direction: min column to max column
+image y direction: min sheet to max sheet
+each pixel computed by traversing from max row to min row
+image x direction: min column to max column
+image y direction: max sheet to min sheet
+each pixel computed by traversing from min row to max row
 
 In conjunction with the dimensions of the current voxel grid, the projectionType
 parameter will also dictate the resolution of the image you create. For example,
-if a voxel data set has dimensions (rows x columns x sheets) = (128 x 256 x
-512), then the generated image will be (width x height) = (128 x 256) for
-projection types 1 and 2; it will have dimensions (width x height) = (256 x 512)
-for types 3 and 4; it will have dimensions (width x height) = (128 x 512) for
-projection types 5 and 6.
+if a voxel data set has dimensions (rows x columns x sheets) = (128 x 256 x 512)
+then the generated image will be (width x height) = (128 x 256) for projection
+types 1 and 2; it will have dimensions (width x height) = (256 x 512) for types
+3 and 4; it will have dimensions (width x height) = (128 x 512) for projection
+types 5 and 6.
 
 The "image x direction" is width; the "image y direction" is height.
 
@@ -78,37 +72,27 @@ append .png or .jpeg, depending on what type of file you want to create.
 The major tasks of your program are (reminder: Do not stack-allocate the arrays
 for the voxel data or for the image files created):
 
-1.	Open and read the indicated file.
-2.	Copy the voxel data to the GPU.
-3.	Use the projectionType and voxel dimensions to allocate three GPU
-	buffers:
-		The image buffer for the "MAX" image.
-		The image buffer for the "SUM" image.
-		A working buffer of type float to assist in creating the "SUM"
-		image.
-4.	Launch a kernel which must compute both the MAX image and the working
-	buffer for the SUM image.
-5.	Launch a second kernel to compute the final SUM image from the SUM
-	working buffer.
-6.	Read the MAX and SUM image buffers back to the CPU. (The working buffer
-	for SUM will never be copied back to the CPU.)
-7.	Delete all the GPU buffers and any other GPU resource you allocated.
-8.	Use the ImageWriter to output the two images. If argv[6] is foo and you
-	want to create PNG images, the two file names will be fooMAX.png and
-	fooSUM.png.
-
---------------------------------------------------------------------------
-
+Open and read the indicated file.
+Copy the voxel data to the GPU.
+Use the projectionType and voxel dimensions to allocate three GPU buffers:
+The image buffer for the "MAX" image.
+The image buffer for the "SUM" image.
+A working buffer of type float to assist in creating the "SUM" image.
+Launch a kernel which must compute both the MAX image and the working buffer for
+the SUM image.
+Launch a second kernel to compute the final SUM image from the SUM working
+buffer.
+Read the MAX and SUM image buffers back to the CPU. (The working buffer for SUM
+will never be copied back to the CPU.)
+Delete all the GPU buffers and any other GPU resource you allocated.
+Use the ImageWriter to output the two images. If argv[6] is foo and you want to
+create PNG images, the two file names will be fooMAX.png and fooSUM.png.
 Creating the MAX image
-
 In the order specified by the projectionType parameter, determine the maximum
 voxel value corresponding to each pixel, and store that maximum value in the
 pixel.
 
---------------------------------------------------------------------------
-
 Creating the SUM image
-
 In the first kernel, and in the order specified by the projectionType parameter
 (note especially the "each pixel computed by traversing..." part), sum the
 weighted values of the voxels corresponding to each pixel. Use as a weight
@@ -121,13 +105,10 @@ working buffer as you go.
 
 In the second kernel, create the actual SUM image by scaling each pixel using
 the maximum weighted sum. Specifically, for each pixel value, p, in the working
-buffer, set the corresponding byte value, P, in the SUM image as P =
-round((p/maxWeightedSum)*255.0). This will create a value: 0 ≤ P ≤ 255.
-
---------------------------------------------------------------------------
+buffer, set the corresponding byte value, P, in the SUM image as
+P = round((p/maxWeightedSum)*255.0). This will create a value: 0 ≤ P ≤ 255.
 
 Sample Data Sets
-
 Download the voxel data sets that will be used when testing your programs.
 Make this voxeldata directory be a sibling to the directory containing your
 program. DO NOT INCLUDE these data sets when you submit your projects. Assuming
@@ -141,27 +122,24 @@ following (recall pt will be one of 1, 2, 3, 4, 5, or 6):
 ./project3 256 256 256 ../voxeldata/foot.raw pt foot
 ./project3 64 64 64 ../voxeldata/fuel.raw pt fuel
 ./project3 128 128 128 ../voxeldata/hydrogenAtom.raw pt hydrogenAtom
-./project3 324 301 56 ../voxeldata/lobster.raw pt lobster
+./project3 301 324 56 ../voxeldata/lobster.raw pt lobster
 ./project3 41 41 41 ../voxeldata/marschnerlobb.raw pt marschnerlobb
 ./project3 256 256 124 ../voxeldata/mri_ventricles.raw pt mri_ventricles
 ./project3 64 64 64 ../voxeldata/neghip.raw pt neghip
 ./project3 41 41 41 ../voxeldata/nucleon.raw pt nucleon
 ./project3 64 64 512 ../voxeldata/shockwave.raw pt shockwave
-./project3 34 98 34 ../voxeldata/silicium.raw pt silicium
+./project3 98 34 34 ../voxeldata/silicium.raw pt silicium
 ./project3 256 256 256 ../voxeldata/skull.raw pt skull
 ./project3 341 341 93 ../voxeldata/statueLeg.raw pt statueLeg
-./project3 512 512 174 ../voxeldata/bonsai.raw pt stent8
+./project3 512 512 174 ../voxeldata/stent8.raw pt stent8
 
 Remember these are binary files. Dynamically allocate an array of unsigned char
 of size nRows*nCols*nSheets and then use a single call to the istream method
-read to ingest the voxel data. (To keep the compiler happy, you may need to use
-a reinterpret_cast on the first parameter to read since the prototype expects
-char* instead of unsigned char*.)
-
---------------------------------------------------------------------------
+read to ingest the voxel data. (To keep the compiler happy, you may need to
+use a reinterpret_cast on the first parameter to read since the prototype
+expects char* instead of unsigned char*.)
 
 Writing the Image Files
-
 Use the ImageWriter class to create your output images from the one byte per
 pixel data retrieved from your kernels. This function shows how to use the
 ImageWriter to output your image.
@@ -178,31 +156,22 @@ compiling the code in your project 3 directory, or add dependencies to your
 project 3 make file like those in your project 2 make file to automatically do
 that if the compiled code is not in ../lib.
 
---------------------------------------------------------------------------
-
 Grading Criteria
-
-(25/100): 	Correct processing of all operations common to MAX and SUM
-(25/100): 	Correct handling of MAX-specific processing and generation of
-		the MAX image file
-(25/100): 	Correct handling of SUM-specific processing and generation of
-		the SUM image file
-(25/100): 	Good design of GPU-specific algorithms, work assignments, and
-		processing (include an informal README file that describes
-		anything related to this that you especially want me to notice)
-
---------------------------------------------------------------------------
-
+(25/100): Correct processing of all operations common to MAX and SUM
+(25/100): Correct handling of MAX-specific processing and generation of the MAX
+image file
+(25/100): Correct handling of SUM-specific processing and generation of the SUM
+image file
+(25/100): Good design of GPU-specific algorithms, work assignments, and
+processing (include an informal README file that describes anything related to
+this that you especially want me to notice)
 Project Submission
-
 Remove all object files (e.g., main.o) and your linked executable program from
 the project3 directory. Then do the following:
 
-	cd ..
-	tar cf project3.tar
-	gzip project3.tar
-	Attach the file project3.tar.gz to an email to me: jrmiller@ku.edu.
+cd ..
+tar cf project3.tar
+gzip project3.tar
+Attach the file project3.tar.gz to an email to me: jrmiller@ku.edu.
 
 Do not include any of the voxel data files or the ImageWriter directory!
-
-
