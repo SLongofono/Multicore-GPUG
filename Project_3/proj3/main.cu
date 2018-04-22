@@ -3,8 +3,15 @@
 #include <fstream>
 #include "ImageWriter.h"
 
+#define DEBUG 1
+
+#include "helpers.h"
+
 using namespace std;
 
+void launchMaxKernel();
+void launchSumKernel1();
+void launchSumKernel2();
 void writeFile(std::string fname, int xres, int yres, const unsigned char* imageBytes){
 	unsigned char *row = new unsigned char[3 * xres];
 	ImageWriter *writer = ImageWriter::create(fname, xres, yres);
@@ -33,12 +40,12 @@ int main(int argc, char **argv){
 		return -1;
 	}
 
-	int nRows, nCols, nSheets, nVals, projection;
+	int nRows, nCols, nSheets, nVals, projType;
 	std::string fileType(".png");
 	nRows = atoi(argv[1]);
 	nCols = atoi(argv[2]);
 	nSheets = atoi(argv[3]);
-	projection = atoi(argv[5]);
+	projType = atoi(argv[5]);
 	nVals = nRows * nCols * nSheets;
 	unsigned char *rawImageData = new unsigned char[nVals];	
 	ifstream infile(argv[4]);
@@ -48,6 +55,31 @@ int main(int argc, char **argv){
 	}
 	infile.read( reinterpret_cast<char *>(rawImageData), nVals);
 	infile.close();
+
+	switch(projType){
+		case 1:
+			cout << "Projection type " << projType << endl;
+			break;
+		case 2:
+			cout << "Projection type " << projType << endl;
+			break;
+		case 3:
+			cout << "Projection type " << projType << endl;
+			break;
+		case 4:
+			cout << "Projection type " << projType << endl;
+			break;
+		case 5:
+			cout << "Projection type " << projType << endl;
+			break;
+		case 6:
+			cout << "Projection type " << projType << endl;
+			break;
+		default:
+			cerr << "[ error ] '" << projType << "' is not a valid projection type, please select from [1,6]" << endl;
+			delete [] rawImageData;
+			return -1;
+	}
 
 	/*
 	 * Spit out an image, unadulterated
