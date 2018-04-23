@@ -2,6 +2,32 @@
  * A Collection of helper functions for the third project.
  */
 
+cuda::cudaDeviceProp *getDevice(int deviceNum){
+	int len;
+	cudaGetDeviceCount(&len);
+	assert(deviceNum > 0);
+	assert(deviceNum < len);
+	cudaDeviceProp * deviceProps = new cudaDeviceProp[1];
+	cudaGetDeviceProperties(&deviceProps[i], deviceNum);
+	return deviceProps;
+}
+
+
+cuda::dim3 getGridGeometry(int nRows, int nCols, int nSheets, int projection){
+	cuda::cudaDeviceProp = getDevice(0);
+	int xDim, yDim, zDim;
+	cuda::dim3 ret(xDim,yDim,zDim);
+	return ret;
+}
+
+
+cuda::dim3 getBlockGeometry(int nRows, int nCols, int nSheets, int projection){
+	cuda::cudaDeviceProp = getDevice(0);
+	int xDim, yDim, zDim;
+	cuda::dim3 ret(xDim,yDim,zDim);
+	return ret;
+}
+
 
 // Quick and dirty matrix multiplication for transformations
 // Where A is M rows by P columns, B is P rows by N columns, C will be M rows by N columns
@@ -16,6 +42,7 @@ void matrixMultiplyColumnMajor(int* A, int* B, int* C, int M, int P, int N){
 		}
 	}
 }
+
 
 /*
  * Given degrees (+/-90, 180) and a unit vector representing the axis of
@@ -54,6 +81,7 @@ int * getTransformationMatrix(int degrees, int l, int m, int n){
 
 	return transform;
 }
+
 
 /*
  * From wikipedia transformation matrix article
@@ -301,6 +329,7 @@ void flipSheets(unsigned char *data, int nRows, int nCols, int nSheets){
 	}
 }
 
+
 // Swaps column order in place
 void flipCols(unsigned char *data, int nRows, int nCols, int nSheets){
 	int temp, sheet, column1, column2;
@@ -317,6 +346,7 @@ void flipCols(unsigned char *data, int nRows, int nCols, int nSheets){
 		}
 	}
 }
+
 
 // Swaps row order in place
 void flipRows(unsigned char *data, int nRows, int nCols, int nSheets){
@@ -335,6 +365,7 @@ void flipRows(unsigned char *data, int nRows, int nCols, int nSheets){
 	}
 }
 
+
 // Simplest logfile approach for debugging
 void log(std::string filename, std::string s){
 	std::ofstream outfile;
@@ -344,6 +375,7 @@ void log(std::string filename, std::string s){
 	}
 	outfile.close();
 }
+
 
 /*
  * Writes an image to the given filename
@@ -366,6 +398,7 @@ void writeFile(std::string fname, int xres, int yres, const unsigned char* image
 	delete writer;
 	delete [] row;
 }
+
 
 /*
  * Dumps device information

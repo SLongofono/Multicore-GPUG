@@ -76,36 +76,64 @@ int main(int argc, char **argv){
 			cudaMalloc((void **)&d_maxImage, nCols*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_sumImage, nCols*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nSheets*sizeof(float));
+			
+			// Get geometry
+
 			break;
 		case 2:
 			cout << "Projection type " << projType << endl;
 			cudaMalloc((void **)&d_maxImage, nCols*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_sumImage, nCols*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nSheets*sizeof(float));
+			
+			// Do rotation
+
+			// Get geometry
+
 			break;
 		case 3:
 			cout << "Projection type " << projType << endl;
 			cudaMalloc((void **)&d_maxImage, nSheets*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_sumImage, nSheets*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nCols*sizeof(float));
+			
+			// Do rotation
+
+			// Get geometry
+
 			break;
 		case 4:
 			cout << "Projection type " << projType << endl;
 			cudaMalloc((void **)&d_maxImage, nSheets*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_sumImage, nSheets*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nCols*sizeof(float));
+			
+			// Do rotation
+
+			// Get geometry
+
 			break;
 		case 5:
 			cout << "Projection type " << projType << endl;
 			cudaMalloc((void **)&d_maxImage, nCols*nSheets*sizeof(unsigned char));
 			cudaMalloc((void **)&d_sumImage, nCols*nSheets*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nRows*sizeof(float));
+			
+			// Do rotation
+
+			// Get geometry
+
 			break;
 		case 6:
 			cout << "Projection type " << projType << endl;
 			cudaMalloc((void **)&d_maxImage, nCols*nSheets*sizeof(unsigned char));
 			cudaMalloc((void **)&d_sumImage, nCols*nSheets*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nRows*sizeof(float));
+			
+			// Do rotation
+
+			// Get geometry
+
 			break;
 		default:
 			cerr << "[ error ] '" << projType << "' is not a valid projection type, please select from [1,6]" << endl;
@@ -119,6 +147,9 @@ int main(int argc, char **argv){
 	 * Clean up
 	 */
 	delete [] rawImageData;
-	
+	cudaFree(d_maxImage);
+	cudaFree(d_sumImage);
+	cudaFree(d_localMax);
+
 	return 0;
 }
