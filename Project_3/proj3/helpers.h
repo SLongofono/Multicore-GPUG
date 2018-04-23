@@ -59,7 +59,12 @@ int * getTransformationMatrix(int degrees, int l, int m, int n){
  * From wikipedia transformation matrix article
  * https://en.wikipedia.org/wiki/Transformation_matrix
  *
- * Note: (l,m,n) represents the unit axis of rotation
+ * 3D Rotation matrix, rotation t about unit axis [l,m,n]
+ *
+ * ll(1-cos(t)) + cos(t)	ml(1-cos(t)) - nsin(t)	nl(1-cos(t)) + msin(t)
+ * lm(1-cos(t)) + nsin(t)	mm(1-cos(t)) + cos(t)	nm(1-cos(t)) - lsin(t)
+ * ln(1-cos(t)) - msin(t)	mn(1-cos(t)) + lsin(t)	nn(1-cos(t)) + cos(t)
+ *
  */
 void rotate(unsigned char *data, int nRows, int nCols, int nSheets, int projection){
 	// Nothing to do
