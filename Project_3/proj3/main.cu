@@ -63,7 +63,7 @@ int main(int argc, char **argv){
 	cudaMalloc((void **)&d_voxels, nVals*sizeof(unsigned char));
 	
 #if DEBUG
-	writeFile("Original.png", nRows, nCols, rawImageData);
+	writeFile("Original.png", nCols, nRows, rawImageData);
 #endif
 
 	/*
@@ -84,7 +84,7 @@ int main(int argc, char **argv){
 			cudaMalloc((void **)&d_sumImage, nCols*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nSheets*sizeof(float));
 #if DEBUG
-			writeFile("Projection1.png", nRows, nCols, rawImageData);
+			writeFile("Projection1.png", nCols, nRows,rawImageData);
 #endif
 
 			break;
@@ -94,7 +94,7 @@ int main(int argc, char **argv){
 			cudaMalloc((void **)&d_sumImage, nCols*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nSheets*sizeof(float));
 #if DEBUG
-			writeFile("Original.png", nRows, nCols, rawImageData);
+			writeFile("Projection2.png", nCols, nRows, rawImageData);
 #endif
 
 			break;
@@ -104,7 +104,7 @@ int main(int argc, char **argv){
 			cudaMalloc((void **)&d_sumImage, nSheets*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nCols*sizeof(float));
 #if DEBUG
-			writeFile("Original.png", nRows, nSheets, rawImageData);
+			writeFile("Projection3.png", nRows, nSheets, rawImageData);
 #endif
 
 			break;
@@ -114,7 +114,7 @@ int main(int argc, char **argv){
 			cudaMalloc((void **)&d_sumImage, nSheets*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nCols*sizeof(float));
 #if DEBUG
-			writeFile("Original.png", nRows, nSheets, rawImageData);
+			writeFile("Projection4.png", nRows, nSheets, rawImageData);
 #endif
 
 			break;
@@ -124,7 +124,7 @@ int main(int argc, char **argv){
 			cudaMalloc((void **)&d_sumImage, nCols*nSheets*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nRows*sizeof(float));
 #if DEBUG
-			writeFile("Original.png", nSheets, nCols, rawImageData);
+			writeFile("Projection5.png", nSheets, nCols, rawImageData);
 #endif
 
 			break;
@@ -134,7 +134,7 @@ int main(int argc, char **argv){
 			cudaMalloc((void **)&d_sumImage, nCols*nSheets*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nRows*sizeof(float));
 #if DEBUG
-			writeFile("Original.png", nSheets, nCols, rawImageData);
+			writeFile("Projection6.png", nSheets, nCols, rawImageData);
 #endif
 
 			break;
