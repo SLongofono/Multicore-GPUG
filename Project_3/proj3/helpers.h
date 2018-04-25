@@ -179,6 +179,23 @@ void projection(unsigned char *data, int nRows, int nCols, int nSheets, int proj
 	delete [] work;
 }
 
+/*
+ * Transposes flattened 2D matrix from column major to row major
+ */
+void transpose(unsigned char *data, int N, int M){
+	int nVals = N*M;
+	unsigned char *work = new unsigned char[nVals];
+	for(int i = 0; i < nVals; ++i){
+		work[i] = data[i];
+	}
+	for(int i = 0; i < nVals; ++i){
+		int j = i/N;
+		int k = i%N;
+		data[i] = work[M*k + j];
+	}
+}
+
+
 
 /*
  * Writes an image to the given filename
@@ -202,6 +219,33 @@ void writeFile(std::string fname, int xres, int yres, const unsigned char* image
 	delete [] row;
 }
 
+
+/*
+ * Writes an image result according to the projection.
+ *
+ * Note that the rubric contradicts itself - the specifications are correct,
+ * the examples are incorrect.  The provided reference images are written with
+ * xres as width and yres as height, but the example text states the converse.
+ */
+void writeImage(fileName, data, projection, nRows, nCols, nSheets){
+	switch(projection){
+		case 1:
+		case 2:
+			transpose(data, nRows, nCols);
+			writeFile(fileName, nCols, nRows, data);
+			break;
+		case 3:
+		case 4:
+			transpose(data, nRows, nSheets);
+			writeFile(fileName, nSheets, nRows, data);
+			break;
+		case 5:
+		case 6:
+			transpose(data, nSheets, nCols);
+			writeFile(fileName, nCols, nSheets, data);
+			break;
+	}
+}
 
 #if 0
 // Quick and dirty matrix multiplication for transformations

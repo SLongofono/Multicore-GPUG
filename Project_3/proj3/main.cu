@@ -38,8 +38,9 @@ int main(int argc, char **argv){
 	nVals = nRows * nCols * nSheets;
 	unsigned char *rawImageData = new unsigned char[nVals];	
 	unsigned char *d_voxels;
-	unsigned char *d_maxImage;
-	unsigned char *d_sumImage;
+	unsigned char *d_maxImage, *h_maxImage;
+	unsigned char *d_sumImage *h_sumImage;
+	int resultSize;
 	float *d_localMax;
 
 	
@@ -61,7 +62,8 @@ int main(int argc, char **argv){
 	 */
 	cudaSetDevice(DEVICE_NUM);
 	cudaMalloc((void **)&d_voxels, nVals*sizeof(unsigned char));
-	
+	cudaMemcpy(d_voxels, rawImageData, nVals*sizeof(unsigned char),cudaMemcpyHostToDevice);
+
 #if DEBUG
 	writeFile("Original.png", nCols, nRows, rawImageData);
 #endif
@@ -80,62 +82,56 @@ int main(int argc, char **argv){
 	switch(projType){
 		case 1:
 			cout << "Projection type " << projType << endl;
-			cudaMalloc((void **)&d_maxImage, nCols*nRows*sizeof(unsigned char));
-			cudaMalloc((void **)&d_sumImage, nCols*nRows*sizeof(unsigned char));
+			resultSize = nCols*nRows*sizeof(unsigned char);
+			h_maxImage = new unsigned char[nCols*nRows];
+			cudaMalloc((void **)&d_maxImage, resultSize);
+			cudaMalloc((void **)&d_sumImage, resultSize);
 			cudaMalloc((void **)&d_localMax, nSheets*sizeof(float));
-#if DEBUG
-			writeFile("Projection1.png", nCols, nRows,rawImageData);
-#endif
 
 			break;
 		case 2:
 			cout << "Projection type " << projType << endl;
-			cudaMalloc((void **)&d_maxImage, nCols*nRows*sizeof(unsigned char));
-			cudaMalloc((void **)&d_sumImage, nCols*nRows*sizeof(unsigned char));
+			resultSize = nCols*nRows*sizeof(unsigned char);
+			h_maxImage = new unsigned char[nCols*nRows];
+			cudaMalloc((void **)&d_maxImage, resultSize);
+			cudaMalloc((void **)&d_sumImage, resultSize);
 			cudaMalloc((void **)&d_localMax, nSheets*sizeof(float));
-#if DEBUG
-			writeFile("Projection2.png", nCols, nRows, rawImageData);
-#endif
 
 			break;
 		case 3:
 			cout << "Projection type " << projType << endl;
-			cudaMalloc((void **)&d_maxImage, nSheets*nRows*sizeof(unsigned char));
-			cudaMalloc((void **)&d_sumImage, nSheets*nRows*sizeof(unsigned char));
+			resultSize = nSheets*nRows*sizeof(unsigned char);
+			h_maxImage = new unsigned char[nSheets*nRows];
+			cudaMalloc((void **)&d_maxImage, resultSize);
+			cudaMalloc((void **)&d_sumImage, resultSize);
 			cudaMalloc((void **)&d_localMax, nCols*sizeof(float));
-#if DEBUG
-			writeFile("Projection3.png", nRows, nSheets, rawImageData);
-#endif
 
 			break;
 		case 4:
 			cout << "Projection type " << projType << endl;
-			cudaMalloc((void **)&d_maxImage, nSheets*nRows*sizeof(unsigned char));
-			cudaMalloc((void **)&d_sumImage, nSheets*nRows*sizeof(unsigned char));
+			resultSize = nSheets*nRows*sizeof(unsigned char);
+			h_maxImage = new unsigned char[nSheets*nRows];
+			cudaMalloc((void **)&d_maxImage, resultSize);
+			cudaMalloc((void **)&d_sumImage, resultSize);
 			cudaMalloc((void **)&d_localMax, nCols*sizeof(float));
-#if DEBUG
-			writeFile("Projection4.png", nRows, nSheets, rawImageData);
-#endif
 
 			break;
 		case 5:
 			cout << "Projection type " << projType << endl;
-			cudaMalloc((void **)&d_maxImage, nCols*nSheets*sizeof(unsigned char));
-			cudaMalloc((void **)&d_sumImage, nCols*nSheets*sizeof(unsigned char));
+			resultSize = nCols*nSheets*sizeof(unsigned char);
+			h_maxImage = new unsigned char[nCols*nSheets];
+			cudaMalloc((void **)&d_maxImage, resultSize);
+			cudaMalloc((void **)&d_sumImage, resultSize);
 			cudaMalloc((void **)&d_localMax, nRows*sizeof(float));
-#if DEBUG
-			writeFile("Projection5.png", nSheets, nCols, rawImageData);
-#endif
 
 			break;
 		case 6:
 			cout << "Projection type " << projType << endl;
-			cudaMalloc((void **)&d_maxImage, nCols*nSheets*sizeof(unsigned char));
-			cudaMalloc((void **)&d_sumImage, nCols*nSheets*sizeof(unsigned char));
+			resultSize = nCols*nSheets*sizeof(unsigned char);
+			h_maxImage = new unsigned char[nCols*nSheets];
+			cudaMalloc((void **)&d_maxImage, resultSize);
+			cudaMalloc((void **)&d_sumImage, resultSize);
 			cudaMalloc((void **)&d_localMax, nRows*sizeof(float));
-#if DEBUG
-			writeFile("Projection6.png", nSheets, nCols, rawImageData);
-#endif
 
 			break;
 		default:
@@ -143,7 +139,19 @@ int main(int argc, char **argv){
 			delete [] rawImageData;
 			return -1;
 	}
-	//writeFile( (argv[6] + fileType), nRows, nCols, rawImageData);
+
+	/*
+	 * Retrieve results
+	 */
+	cudaMemcpy(h_maxImage, d_maxImage, resultSize, cudaMemcpyDeviceToHost); 
+	//cudaMemcpy(h_sumImage, d_sumImage, resultSize, cudaMemcpyDeviceToHost); 
+
+	/*
+	 * Write results
+	 */
+	writeImage("max.png", h_maxImage, projType, nRows, nCols, nSheets);
+	//writeImage("sum.png", h_sumImage, projType, nRows, nCols, nSheets);
+	
 
 	/*
 	 * Clean up
