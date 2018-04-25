@@ -2,33 +2,208 @@
  * A Collection of helper functions for the third project.
  */
 
-cuda::cudaDeviceProp *getDevice(int deviceNum){
+/*
+ * Dumps device information
+ */
+void dumpDevices(){
+
+	int len;
+	cudaGetDeviceCount(&len);	
+	cudaDeviceProp * deviceProps = new cudaDeviceProp[len];
+
+	std::cout << "Found " << len << " devices..." << std::endl;
+
+	for(int i = 0; i < len; ++i){
+
+		cudaGetDeviceProperties(&deviceProps[i], i);
+	
+		std::cout << "Device " << i << ":\t" << deviceProps[i].name << std::endl;
+		
+		// Grab interesting attributes here
+		std::cout << "Global memory available:      " << deviceProps[i].totalGlobalMem << std::endl;
+		std::cout << "Shared memory per block(max): " << deviceProps[i].sharedMemPerBlock << std::endl;
+		std::cout << "Shared memory per SM:         " << deviceProps[i].sharedMemPerMultiprocessor << std::endl;
+		std::cout << "Threads per SM (max):         " << deviceProps[i].maxThreadsPerMultiProcessor << std::endl;
+		std::cout << "Warp size:                    " << deviceProps[i].warpSize << std::endl;
+		std::cout << "Registers per block (max):    " << deviceProps[i].regsPerBlock << std::endl;
+		std::cout << "Compute capability:           " << deviceProps[i].major << "." << deviceProps[i].minor << std::endl;
+		if(deviceProps[i].major < 2){
+			std::cout << "Number of warp schedulers:    " << 1 << std::endl;
+		}
+		else if(deviceProps[i].major < 3){
+			std::cout << "Number of warp schedulers:    " << 2 << std::endl;
+		}
+		else{
+			std::cout << "Number of warp schedulers:    " << 4 << std::endl;
+		}
+		std::cout << std::endl;
+
+	}
+	
+	delete [] deviceProps;
+
+}
+
+
+/*
+ * Fetches device properties struct
+ */
+cudaDeviceProp *getDevice(int deviceNum){
 	int len;
 	cudaGetDeviceCount(&len);
 	assert(deviceNum > 0);
 	assert(deviceNum < len);
 	cudaDeviceProp * deviceProps = new cudaDeviceProp[1];
-	cudaGetDeviceProperties(&deviceProps[i], deviceNum);
+	cudaGetDeviceProperties(deviceProps, deviceNum);
 	return deviceProps;
 }
 
 
-cuda::dim3 getGridGeometry(int nRows, int nCols, int nSheets, int projection){
-	cuda::cudaDeviceProp = getDevice(0);
+/*
+ * Uses heuristic approach to select grid dimensions
+ */
+dim3 getGridGeometry(int nRows, int nCols, int nSheets, int projection){
+	cudaDeviceProp *myDevice = getDevice(0);
 	int xDim, yDim, zDim;
-	cuda::dim3 ret(xDim,yDim,zDim);
+	dim3 ret(1,2,3);
 	return ret;
 }
 
 
-cuda::dim3 getBlockGeometry(int nRows, int nCols, int nSheets, int projection){
-	cuda::cudaDeviceProp = getDevice(0);
+/*
+ * Uses heuristic approach to select block dimensions
+ */
+dim3 getBlockGeometry(int nRows, int nCols, int nSheets, int projection){
+	cudaDeviceProp *myDevice = getDevice(0);
 	int xDim, yDim, zDim;
-	cuda::dim3 ret(xDim,yDim,zDim);
+	dim3 ret(1,2,3);
 	return ret;
 }
 
 
+/*
+ * Simplest logfile approach for debugging
+ */
+void log(std::string filename, std::string s){
+	std::ofstream outfile;
+	outfile.open(filename, std::ios_base::app);
+	if(outfile.good()){
+		outfile << s << std::endl;
+	}
+	outfile.close();
+}
+
+
+/*
+ *  Projection of voxel data per rubric, column major from a different cardinal
+ *  perspective.  The input and output array are packed in column major, one
+ *  sheet at a time.
+ */
+void projection(unsigned char *data, int nRows, int nCols, int nSheets, int projection){
+	
+	if(1 == projection){
+		// Nothing to do
+		return;
+	}
+	
+	int curPos, newPos, temp;
+	int newX, newY, newZ;
+	int newRows, newCols, newSheets;
+	int nVals = nRows*nCols*nSheets;
+	int *work = new int[nVals];
+	for(int i = 0; i < nVals; ++i){
+		work[i] = data[i];
+	}
+
+	for(int x = 0; x < nCols; ++x){
+		for(int y = 0; y < nRows; ++y){
+			for(int z = 0; z < nSheets; ++z){
+				// Assign new coordinates, based on projection
+				// type per rubric
+				switch(projection){
+					case 2:
+						newRows = nRows;
+						newCols = nCols;
+						newSheets = nSheets;
+						newX = newCols - x - 1;
+						newY = y;
+						newZ = newSheets - z - 1;
+						break;
+					case 3:
+						newRows = nRows;
+						newCols = nSheets;
+						newSheets = nCols;
+						newX = newCols - z - 1;
+						newY = y;
+						newZ = newSheets - x - 1;
+						break;
+					case 4:
+						newRows = nRows;
+						newCols = nSheets;
+						newSheets = nCols;
+						newX = newCols - z - 1;
+						newY = y;
+						newZ = x;
+						break;
+					case 5:
+						newRows = nSheets;
+						newCols = nCols;
+						newSheets = nRows;
+						newX = x;
+						newY = z;
+						newZ = newSheets - y - 1;
+						break;
+					case 6:
+						newRows = nSheets;
+						newCols = nCols;
+						newSheets = nRows;
+						newX = x;
+						newY = newRows - z - 1;
+						newZ = y;
+						break;
+					default:
+						assert("Invalid projection type in projection()" == "");
+				}
+				
+
+				// column major, new orientation
+				newPos = newZ*newRows*newCols + newX*newRows + newY;
+
+				// Column major, old orientation
+				curPos = z*nRows*nCols + x*nRows + y;
+
+				data[newPos] = work[curPos];
+			}
+		}
+	}
+	delete [] work;
+}
+
+
+/*
+ * Writes an image to the given filename
+ * Assumes that the image is a greyscale with a single 8-bit value for each
+ * pixel
+ */
+void writeFile(std::string fname, int xres, int yres, const unsigned char* imageBytes){
+	unsigned char *row = new unsigned char[3 * xres];
+	ImageWriter *writer = ImageWriter::create(fname, xres, yres);
+	int next = 0;
+	for(int r = 0; r < yres; ++r){
+		for(int c = 0; c < 3*xres; c += 3){
+			// The internal representation of the image is
+			// (r,g,b), so write the same value for all three
+			row[c] = row[c+1] = row[c+2] = imageBytes[next++];
+		}
+		writer->addScanLine(row);
+	}
+	writer->closeImageFile();
+	delete writer;
+	delete [] row;
+}
+
+
+#if 0
 // Quick and dirty matrix multiplication for transformations
 // Where A is M rows by P columns, B is P rows by N columns, C will be M rows by N columns
 void matrixMultiplyColumnMajor(int* A, int* B, int* C, int M, int P, int N){
@@ -159,38 +334,10 @@ void rotate(unsigned char *data, int nRows, int nCols, int nSheets, int projecti
 }
 
 
-/*
- *  Original orientation: x-> cols, y->rows, z->sheets
- *  Projects x as max to min column, y as min to max row, z as max to min sheet
- */
-void projection2(unsigned char *data, int nRows, int nCols, int nSheets){
-	int curPos, newPos, temp;
-	int nVals = nRows*nCols*nSheets;
-	int *work = new int[nVals];
-	for(int i = 0; i < nVals; ++i){
-		work[i] = data[i];
-	}
-
-	for(int x = 0; x < nCols; ++x){
-		for(int y = 0; y < nRows; ++y){
-			for(int z = 0; z < nSheets; ++z){
-				// column major, new orientation
-				newPos = ((nSheets - z - 1)*nRows*nCols) +
-					((nCols - x - 1)*nRows) +
-					y;
-
-				assert(newPos < nVals);
-
-				// Column major, old orientation
-				curPos = z*nRows*nCols + x*nRows + y;
-				data[newPos] = work[curPos];
-			}
-		}
-	}
-	delete [] work;
-}
+#endif
 
 
+#if 0
 /*
  *  Original orientation: x-> cols, y->rows, z->sheets
  *  Projects x as min to max sheet, y as min to max row, z as min to max column
@@ -365,79 +512,6 @@ void flipRows(unsigned char *data, int nRows, int nCols, int nSheets){
 	}
 }
 
-
-// Simplest logfile approach for debugging
-void log(std::string filename, std::string s){
-	std::ofstream outfile;
-	outfile.open(filename, std::ios_base::app);
-	if(outfile.good()){
-		outfile << s << std::endl;
-	}
-	outfile.close();
-}
+#endif
 
 
-/*
- * Writes an image to the given filename
- * Assumes that the image is a greyscale with a single 8-bit value for each
- * pixel
- */
-void writeFile(std::string fname, int xres, int yres, const unsigned char* imageBytes){
-	unsigned char *row = new unsigned char[3 * xres];
-	ImageWriter *writer = ImageWriter::create(fname, xres, yres);
-	int next = 0;
-	for(int r = 0; r < yres; ++r){
-		for(int c = 0; c < 3*xres; c += 3){
-			// The internal representation of the image is
-			// (r,g,b), so write the same value for all three
-			row[c] = row[c+1] = row[c+2] = imageBytes[next++];
-		}
-		writer->addScanLine(row);
-	}
-	writer->closeImageFile();
-	delete writer;
-	delete [] row;
-}
-
-
-/*
- * Dumps device information
- */
-void dumpDevices(){
-
-	int len;
-	cudaGetDeviceCount(&len);	
-	cudaDeviceProp * deviceProps = new cudaDeviceProp[len];
-
-	std::cout << "Found " << len << " devices..." << std::endl;
-
-	for(int i = 0; i < len; ++i){
-
-		cudaGetDeviceProperties(&deviceProps[i], i);
-	
-		std::cout << "Device " << i << ":\t" << deviceProps[i].name << std::endl;
-		
-		// Grab interesting attributes here
-		std::cout << "Global memory available:      " << deviceProps[i].totalGlobalMem << std::endl;
-		std::cout << "Shared memory per block(max): " << deviceProps[i].sharedMemPerBlock << std::endl;
-		std::cout << "Shared memory per SM:         " << deviceProps[i].sharedMemPerMultiprocessor << std::endl;
-		std::cout << "Threads per SM (max):         " << deviceProps[i].maxThreadsPerMultiProcessor << std::endl;
-		std::cout << "Warp size:                    " << deviceProps[i].warpSize << std::endl;
-		std::cout << "Registers per block (max):    " << deviceProps[i].regsPerBlock << std::endl;
-		std::cout << "Compute capability:           " << deviceProps[i].major << "." << deviceProps[i].minor << std::endl;
-		if(deviceProps[i].major < 2){
-			std::cout << "Number of warp schedulers:    " << 1 << std::endl;
-		}
-		else if(deviceProps[i].major < 3){
-			std::cout << "Number of warp schedulers:    " << 2 << std::endl;
-		}
-		else{
-			std::cout << "Number of warp schedulers:    " << 4 << std::endl;
-		}
-		std::cout << std::endl;
-
-	}
-	
-	delete [] deviceProps;
-
-}

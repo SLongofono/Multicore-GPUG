@@ -62,6 +62,9 @@ int main(int argc, char **argv){
 	cudaSetDevice(DEVICE_NUM);
 	cudaMalloc((void **)&d_voxels, nVals*sizeof(unsigned char));
 	
+#if DEBUG
+	writeFile("Original.png", nRows, nCols, rawImageData);
+#endif
 
 	/*
 	 * Configure projection-specific details and launch kernels.  Rather
@@ -70,14 +73,19 @@ int main(int argc, char **argv){
 	 * projection, allowing us to optimize memory access in terms of the
 	 * resulting 2D image dimensions.
 	 */
+	
+	// Re-flatten array per projection
+	projection(rawImageData, nRows, nCols, nSheets, projType);
+
 	switch(projType){
 		case 1:
 			cout << "Projection type " << projType << endl;
 			cudaMalloc((void **)&d_maxImage, nCols*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_sumImage, nCols*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nSheets*sizeof(float));
-			
-			// Get geometry
+#if DEBUG
+			writeFile("Projection1.png", nRows, nCols, rawImageData);
+#endif
 
 			break;
 		case 2:
@@ -85,10 +93,9 @@ int main(int argc, char **argv){
 			cudaMalloc((void **)&d_maxImage, nCols*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_sumImage, nCols*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nSheets*sizeof(float));
-			
-			// Do rotation
-
-			// Get geometry
+#if DEBUG
+			writeFile("Original.png", nRows, nCols, rawImageData);
+#endif
 
 			break;
 		case 3:
@@ -96,10 +103,9 @@ int main(int argc, char **argv){
 			cudaMalloc((void **)&d_maxImage, nSheets*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_sumImage, nSheets*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nCols*sizeof(float));
-			
-			// Do rotation
-
-			// Get geometry
+#if DEBUG
+			writeFile("Original.png", nRows, nSheets, rawImageData);
+#endif
 
 			break;
 		case 4:
@@ -107,10 +113,9 @@ int main(int argc, char **argv){
 			cudaMalloc((void **)&d_maxImage, nSheets*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_sumImage, nSheets*nRows*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nCols*sizeof(float));
-			
-			// Do rotation
-
-			// Get geometry
+#if DEBUG
+			writeFile("Original.png", nRows, nSheets, rawImageData);
+#endif
 
 			break;
 		case 5:
@@ -118,10 +123,9 @@ int main(int argc, char **argv){
 			cudaMalloc((void **)&d_maxImage, nCols*nSheets*sizeof(unsigned char));
 			cudaMalloc((void **)&d_sumImage, nCols*nSheets*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nRows*sizeof(float));
-			
-			// Do rotation
-
-			// Get geometry
+#if DEBUG
+			writeFile("Original.png", nSheets, nCols, rawImageData);
+#endif
 
 			break;
 		case 6:
@@ -129,10 +133,9 @@ int main(int argc, char **argv){
 			cudaMalloc((void **)&d_maxImage, nCols*nSheets*sizeof(unsigned char));
 			cudaMalloc((void **)&d_sumImage, nCols*nSheets*sizeof(unsigned char));
 			cudaMalloc((void **)&d_localMax, nRows*sizeof(float));
-			
-			// Do rotation
-
-			// Get geometry
+#if DEBUG
+			writeFile("Original.png", nSheets, nCols, rawImageData);
+#endif
 
 			break;
 		default:
@@ -140,7 +143,6 @@ int main(int argc, char **argv){
 			delete [] rawImageData;
 			return -1;
 	}
-
 	//writeFile( (argv[6] + fileType), nRows, nCols, rawImageData);
 
 	/*
