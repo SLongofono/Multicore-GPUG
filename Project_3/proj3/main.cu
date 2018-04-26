@@ -11,6 +11,56 @@
 
 using namespace std;
 
+
+/*
+ * The max image kernel
+ *
+ * Each thread will collapse one pixel of the result matrix.  This apporach
+ * allows the collective memory accesses to happen in a columnwise fashion and
+ * be coalesced by the GPU memory manager.
+ */
+__global__ maxKernel(unsigned char *voxels, unsigned char *maxImage, float *maxes, int nRows, int nCols, int nSheets, int boundary){
+
+	// Since the data is in column-major order, the thread IDs correspond
+	// to the initial position in the first column of the first sheet
+	int myStartOffset = blockDim.x * blockIdx.x + threadIdx;
+	int localMax = -1;
+	int globalMax = -1;
+	if(myStartOffset < boundary){
+		for(int c = 0; c < nCols; ++c){
+			/* Step through the sheets, tracking the max along all sheets
+			 *
+			 * If we want to access column wise no matter what, we
+			 * need to traverse each position across all sheets
+			 * before moving on to the next row.
+			 *
+			 * This means we start at our column offset, increment
+			 * by the dimensions of each sheet, and track the max
+			 * as we go.
+			 *
+			 * Then, to get to the next row, we take our offset
+			 * plus the number of rows times the current column
+			 * index.  This allows each thread to step through the
+			 * rows, while ensuring that all executing threads are
+			 * accessing the same column synchronously.
+			 *
+			 * So long as we ensure that we have enough threads to
+			 * cover a column in full (ideally more than that),
+			 * and we check to make sure that we haven't run out
+			 * of columns, then we should be fine
+			 *
+			 */
+			for(int n = myStartOffset + c*nRows; n < nRows*nCols*nSheets; n += nRows*nCols){
+				localMax = (localMax < voxels[n]) ? voxels[n] : localMax;
+				globalMax = (globalMax < localMax) ? localMax : globalMax;
+			}
+
+			// Assign the max of each sheet position to the corresponding output image position
+		}
+	}
+
+}
+
 int main(int argc, char **argv){
 	
 	/*
