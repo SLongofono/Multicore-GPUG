@@ -34,6 +34,7 @@ void __global__ maxKernel(unsigned char *voxels, unsigned char *maxImage, float 
 	unsigned char val = 0;
 	unsigned char localMax = 0;
 
+	// In case we got rounded up, make sure we have a row to work on.
 	if(myRow < nRows){
 
 		/*
@@ -68,18 +69,26 @@ void __global__ maxKernel(unsigned char *voxels, unsigned char *maxImage, float 
 		 *
 		 */
 
+		// TODO this is slightly off, I think I'm not getting all the
+		// data.  Rewrite in terms of row, col, sheet and go from
+		// there.
+
 		for(int curPos = myRow; curPos < size; curPos += nRows){
 
 			for(int sh = 0; sh < nSheets; ++sh){
 				val = voxels[curPos + sh*size];
 
 				// Fill in work for the max image
-				localMax = (int)localMax > (int)val ? localMax : val;
+				if((int) val > (int)localMax){
+					localMax = val;
+				}
+				//localMax = (int)localMax > (int)val ? localMax : val;
 
 				// Fill in work for the sum image, the running
 				// weighted sum along the collapsed dimension
 				localMaxes[curPos] += norm * ((1 + sh)*(int)val);
 			}
+
 			// Fill in maxImage for this position
 			maxImage[curPos] = localMax;
 
