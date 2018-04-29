@@ -5,6 +5,7 @@
 #include <cuda.h>
 #include "helpers.h"
 #include "kernels.h"
+#include <cmath>
 
 #define DEBUG 1
 #define DEVICE_NUM 0
@@ -19,43 +20,71 @@ using namespace std;
  * allows the collective memory accesses to happen in a columnwise fashion and
  * be coalesced by the GPU memory manager.
  */
-__global__ maxKernel(unsigned char *voxels, unsigned char *maxImage, float *maxes, int nRows, int nCols, int nSheets, int boundary){
+void __global__ maxKernel(unsigned char *voxels, unsigned char *maxImage, float *localMaxes, float *globalMax, int nRows, int nCols, int nSheets){
 
-	// Since the data is in column-major order, the thread IDs correspond
-	// to the initial position in the first column of the first sheet
-	int myStartOffset = blockDim.x * blockIdx.x + threadIdx;
-	int localMax = -1;
-	int globalMax = -1;
-	if(myStartOffset < boundary){
-		for(int c = 0; c < nCols; ++c){
-			/* Step through the sheets, tracking the max along all sheets
-			 *
-			 * If we want to access column wise no matter what, we
-			 * need to traverse each position across all sheets
-			 * before moving on to the next row.
-			 *
-			 * This means we start at our column offset, increment
-			 * by the dimensions of each sheet, and track the max
-			 * as we go.
-			 *
-			 * Then, to get to the next row, we take our offset
-			 * plus the number of rows times the current column
-			 * index.  This allows each thread to step through the
-			 * rows, while ensuring that all executing threads are
-			 * accessing the same column synchronously.
-			 *
-			 * So long as we ensure that we have enough threads to
-			 * cover a column in full (ideally more than that),
-			 * and we check to make sure that we haven't run out
-			 * of columns, then we should be fine
-			 *
-			 */
-			for(int n = myStartOffset + c*nRows; n < nRows*nCols*nSheets; n += nRows*nCols){
-				localMax = (localMax < voxels[n]) ? voxels[n] : localMax;
-				globalMax = (globalMax < localMax) ? localMax : globalMax;
+	/*
+	 * Since the data is in column-major order, the thread IDs correspond
+	 * to the initial position in the first column of the first sheet.
+	 * That is, each thread will have a different row, and that row will
+	 * be constant across its work.
+	 */
+	int myRow = blockDim.x * blockIdx.x + threadIdx.x;
+	int size = nRows*nCols;
+	float norm = 1.0/nSheets;
+	unsigned char val = 0;
+	unsigned char localMax = 0;
+
+	if(myRow < nRows){
+
+		/*
+		 * The data is stored in column-major order, so we
+		 * need to ensure that SIMD threads are accessing the
+		 * data in the same way to exploit coalesced memory
+		 * access.
+		 *
+		 * Thus we want each thread to be responsible for a
+		 * row, and iterate over all columns, all sheets in
+		 * that row.  Effectively, each thread will handle
+		 * collapsing the slice formed by its row across all
+		 * the sheets
+		 *
+		 * Each thread starts its work at the 0th column, in
+		 * its row, which is naturally aligned to the thread
+		 * index if we use a 1D kernel.
+		 *
+		 * Each thread will increment over columns, each
+		 * column starting nRows from the start of the previous one.
+		 *
+		 * For each column, each thread will increment over all
+		 * sheets, in increments of nRows*nCols.
+		 *
+		 * The position each thread is responsible for is determined
+		 * from the rows and columns; Each thread has a fixed row, and
+		 * as we progress through the columns the column is updated.
+		 * We follow the column-major convention, so the position is
+		 * determined as thisCol*nRows + thisRow.  The same is used to
+		 * store the maximum for each position in the final image, for
+		 * use in the sum kernel
+		 *
+		 */
+
+		for(int curPos = myRow; curPos < size; curPos += nRows){
+
+			for(int sh = 0; sh < nSheets; ++sh){
+				val = voxels[curPos + sh*size];
+
+				// Fill in work for the max image
+				localMax = (int)localMax > (int)val ? localMax : val;
+
+				// Fill in work for the sum image, the running
+				// weighted sum along the collapsed dimension
+				localMaxes[curPos] += norm * ((1 + sh)*(int)val);
 			}
+			// Fill in maxImage for this position
+			maxImage[curPos] = localMax;
 
-			// Assign the max of each sheet position to the corresponding output image position
+			// Adjust highest weighted sum seen if necessary
+			globalMax[0] = globalMax[0] > localMaxes[curPos] ? globalMax[0] : localMaxes[curPos];
 		}
 	}
 
@@ -89,9 +118,10 @@ int main(int argc, char **argv){
 	unsigned char *rawImageData = new unsigned char[nVals];	
 	unsigned char *d_voxels;
 	unsigned char *d_maxImage, *h_maxImage;
-	unsigned char *d_sumImage *h_sumImage;
+	unsigned char *d_sumImage, *h_sumImage;
 	int resultSize;
-	float *d_localMax;
+	float *d_localMaxes;
+	float *d_globalMax;
 
 	
 	ifstream infile(argv[4]);
@@ -129,15 +159,66 @@ int main(int argc, char **argv){
 	// Re-flatten array per projection
 	projection(rawImageData, nRows, nCols, nSheets, projType);
 
+	// Issue kernels
 	switch(projType){
-		case 1:
-			cout << "Projection type " << projType << endl;
-			resultSize = nCols*nRows*sizeof(unsigned char);
-			h_maxImage = new unsigned char[nCols*nRows];
-			cudaMalloc((void **)&d_maxImage, resultSize);
-			cudaMalloc((void **)&d_sumImage, resultSize);
-			cudaMalloc((void **)&d_localMax, nSheets*sizeof(float));
+		case 1:	// Note: need braces to restrict scope of the local variables
+			{
+				cout << "Projection type " << projType << endl;
+				resultSize = nCols*nRows*sizeof(unsigned char);
+				h_maxImage = new unsigned char[nCols*nRows];
+				cudaMalloc((void **)&d_maxImage, resultSize);
+				cudaMalloc((void **)&d_sumImage, resultSize);
+				cudaMalloc((void **)&d_localMaxes, nCols*nRows*sizeof(float));
+				cudaMalloc((void **)&d_globalMax, sizeof(float));
+			
+				/*
+				 * On selecting sizes
+				 * 
+				 * We really don't have enough work to make
+				 * great use of the GPU here.  Ideally, we
+				 * want enough blocks such that each SM has
+				 * several blocks to run, some multiple of the
+				 * number of schedulers.  However, we also
+				 * need to balance the divison of work such
+				 * that we don't incur too much overhead
+				 * managing the blocks.  In this case, there
+				 * isn't much work to be done, so the overhead
+				 * is relatively large to the workload.
+				 */
 
+				// Threads per block should be a multiple of warp size
+				int warpsize = 32;
+
+				//  Number of warp schedulers is important
+				int numWarpSchedulers = 2;
+
+				// Cannot exceed this
+				int maxThreadsPerSM = 1536;
+
+				// We want each thread to do one row so it has
+				// sufficient work
+				int numThreads = nRows;
+
+				// We have little internal memory and no
+				// shared memory, so these are irrelevant
+				
+				// first approximation
+				int threadsPerBlock = warpsize * numWarpSchedulers;
+				
+				// Bounds check
+				threadsPerBlock = threadsPerBlock <= maxThreadsPerSM ? threadsPerBlock : maxThreadsPerSM;
+					
+				// Total number of threads divided by threads
+				// per block dictates blocks per grid.
+				int blocksPerGrid = ceil(numThreads/threadsPerBlock);
+
+				cout << "Launching kernel..." << endl;
+				cout << "Total threads: " << numThreads << endl;
+				cout << "Threads per block: " << threadsPerBlock << endl;
+				cout << "Number of blocks: " << blocksPerGrid << endl;
+
+				maxKernel<<<blocksPerGrid, threadsPerBlock>>>(rawImageData, d_maxImage, d_localMaxes, d_globalMax, nRows, nCols, nSheets);
+			}
 			break;
 		case 2:
 			cout << "Projection type " << projType << endl;
@@ -145,7 +226,7 @@ int main(int argc, char **argv){
 			h_maxImage = new unsigned char[nCols*nRows];
 			cudaMalloc((void **)&d_maxImage, resultSize);
 			cudaMalloc((void **)&d_sumImage, resultSize);
-			cudaMalloc((void **)&d_localMax, nSheets*sizeof(float));
+			cudaMalloc((void **)&d_localMaxes, nCols*nRows*sizeof(float));
 
 			break;
 		case 3:
@@ -154,7 +235,7 @@ int main(int argc, char **argv){
 			h_maxImage = new unsigned char[nSheets*nRows];
 			cudaMalloc((void **)&d_maxImage, resultSize);
 			cudaMalloc((void **)&d_sumImage, resultSize);
-			cudaMalloc((void **)&d_localMax, nCols*sizeof(float));
+			cudaMalloc((void **)&d_localMaxes, nSheets*nRows*sizeof(float));
 
 			break;
 		case 4:
@@ -163,7 +244,7 @@ int main(int argc, char **argv){
 			h_maxImage = new unsigned char[nSheets*nRows];
 			cudaMalloc((void **)&d_maxImage, resultSize);
 			cudaMalloc((void **)&d_sumImage, resultSize);
-			cudaMalloc((void **)&d_localMax, nCols*sizeof(float));
+			cudaMalloc((void **)&d_localMaxes, nSheets*nRows*sizeof(float));
 
 			break;
 		case 5:
@@ -172,7 +253,7 @@ int main(int argc, char **argv){
 			h_maxImage = new unsigned char[nCols*nSheets];
 			cudaMalloc((void **)&d_maxImage, resultSize);
 			cudaMalloc((void **)&d_sumImage, resultSize);
-			cudaMalloc((void **)&d_localMax, nRows*sizeof(float));
+			cudaMalloc((void **)&d_localMaxes, nCols*nSheets*sizeof(float));
 
 			break;
 		case 6:
@@ -181,7 +262,7 @@ int main(int argc, char **argv){
 			h_maxImage = new unsigned char[nCols*nSheets];
 			cudaMalloc((void **)&d_maxImage, resultSize);
 			cudaMalloc((void **)&d_sumImage, resultSize);
-			cudaMalloc((void **)&d_localMax, nRows*sizeof(float));
+			cudaMalloc((void **)&d_localMaxes, nCols*nSheets*sizeof(float));
 
 			break;
 		default:
@@ -199,7 +280,7 @@ int main(int argc, char **argv){
 	/*
 	 * Write results
 	 */
-	writeImage("max.png", h_maxImage, projType, nRows, nCols, nSheets);
+	writeImage(argv[6] + std::string("_max.png"), h_maxImage, projType, nRows, nCols, nSheets);
 	//writeImage("sum.png", h_sumImage, projType, nRows, nCols, nSheets);
 	
 
@@ -209,7 +290,8 @@ int main(int argc, char **argv){
 	delete [] rawImageData;
 	cudaFree(d_maxImage);
 	cudaFree(d_sumImage);
-	cudaFree(d_localMax);
+	cudaFree(d_localMaxes);
+	cudaFree(d_globalMax);
 
 	return 0;
 }

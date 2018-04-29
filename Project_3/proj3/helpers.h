@@ -227,7 +227,7 @@ void writeFile(std::string fname, int xres, int yres, const unsigned char* image
  * the examples are incorrect.  The provided reference images are written with
  * xres as width and yres as height, but the example text states the converse.
  */
-void writeImage(fileName, data, projection, nRows, nCols, nSheets){
+void writeImage(std::string fileName, unsigned char *data, int projection, int nRows, int nCols, int nSheets){
 	switch(projection){
 		case 1:
 		case 2:
