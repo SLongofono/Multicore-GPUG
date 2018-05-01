@@ -39,48 +39,8 @@ void __global__ maxKernel(unsigned char *voxels, unsigned char *maxImage, float 
 
 	// In case we got rounded up, make sure we have a row to work on.
 //	if(myRow < nRows){
-	if(myRow == 0){
+	if(myRow == 0){ // Just have thread 0 fire to simplify debugging
 
-#if 0
-		// Do some sanity checks
-		//Verify we can access every voxel
-		for(int i = 0; i<nRows; ++i){
-			for(int j = 0; j<nCols; ++j){
-				for(int k = 0; k<nSheets; ++k){
-					int arg  = 	k*nRows*nCols +
-							j*nRows +
-							i;
-					int temp = voxels[arg];
-					printf("Voxel %d OK. ", arg);
-				}
-			}
-		}
-
-		printf("We can access all voxels...\n");
-
-		// Verify we can write every piece of the output image
-		for(int i = 0; i<nRows; ++i){
-			for(int j = 0; j<nCols; ++j){
-				int arg = j*nRows + i;
-				maxImage[arg] = 0;
-				printf("Output %d OK/ ",arg);
-			}
-		}
-
-		printf("We can access all pieces of the output image...\n");
-
-		// Verify we can write every piece of the weighted sums
-		for(int i = 0; i<nRows; ++i){
-			for(int j = 0; j<nCols; ++j){
-				int arg = j*nRows + i;
-				weightedSums[arg] = 0.0;
-				printf("Weighted sum %d OK. ", arg);
-			}
-		}
-	
-		printf("We can access all pieces of the weighted sums array...\n");
-		printf("TESTS PASSED!\n");
-#endif
 		/*
 		 * The data is stored in column-major order, so we
 		 * need to ensure that SIMD threads are accessing the
@@ -120,6 +80,7 @@ void __global__ maxKernel(unsigned char *voxels, unsigned char *maxImage, float 
 
 
 		//for(int curPos = myRow; curPos < myMaxPos; curPos += nRows){
+
 			// Current position wrt output image
 			int curPos = myRow + c*nRows;
 
@@ -226,9 +187,7 @@ int main(int argc, char **argv){
 	 * necessary, but I wanted to leave this here for future reference.
 	 */
 	cudaSetDevice(DEVICE_NUM);
-	validate(
-		cudaMalloc((void **)&d_voxels, nVals*sizeof(unsigned char))
-	);
+	validate(cudaMalloc((void **)&d_voxels, nVals*sizeof(unsigned char)));
 
 	/*
 	 * Configure projection-specific details and launch kernels.  Rather
@@ -301,7 +260,8 @@ int main(int argc, char **argv){
 				cout << "Number of blocks: " << blocksPerGrid << endl;
 
 				maxKernel<<<blocksPerGrid, threadsPerBlock>>>(rawImageData, d_maxImage, d_weightedSums, d_globalMax, nRows, nCols, nSheets);
-				validate(cudaPeekAtLastError());
+				validate(cudaPeekAtLastError()); // Check invalid launch
+				validate(cudaDeviceSynchronize()); // Check runtime error
 			}
 			break;
 		case 2:
