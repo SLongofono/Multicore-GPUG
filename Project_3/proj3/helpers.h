@@ -3,6 +3,21 @@
  */
 
 /*
+ * Hacky way to do atomic max with float arguments
+ * from https://stackoverflow.com/questions/17399119/cant-we-use-atomic-operations-for-floating-point-variables-in-cuda
+ */
+__device__ static float atomicMax(float *address, float val){
+	int * address_as_i = (int *)address;
+	int old = *address_as_i, assumed;
+	do{
+		assumed = old;
+		old = ::atomicCAS(	address_as_i, assumed,
+					__float_as_int(::fmaxf(val, __int_as_float(assumed))));
+	} while (assumed != old);
+	return __int_as_float(old);
+}
+
+/*
  * Dumps device information
  */
 void dumpDevices(){
@@ -79,6 +94,26 @@ dim3 getBlockGeometry(int nRows, int nCols, int nSheets, int projection){
 	dim3 ret(1,2,3);
 	return ret;
 }
+
+// Error handler from
+// https://stackoverflow.com/questions/14038589/what-is-the-canonical-way-to-check-for-errors-using-the-cuda-runtime-api
+inline void gpuAssert(cudaError_t code, const char *filename, int line, bool abort=true){
+	if(code != cudaSuccess){
+		std::cout 	<< "GPU asserted an error on line "
+				<< line << " from file " << filename
+				<< ":" << std::endl << cudaGetErrorString(code)
+				<< std::endl;
+		if(abort){
+			exit(-1);
+		}
+	}
+	else{
+		std::cout << "SUCCESS: line " << line << " in " << filename << std::endl;
+	}
+}
+
+// Use a macro so we can access file and line information
+#define validate(answer) { gpuAssert((answer),__FILE__, __LINE__); }
 
 
 /*
