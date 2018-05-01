@@ -4,7 +4,6 @@
 #include "ImageWriter.h"
 #include <cuda.h>
 #include "helpers.h"
-#include "kernels.h"
 #include <cmath>
 
 #define DEBUG 1
@@ -20,7 +19,7 @@ using namespace std;
  * allows the collective memory accesses to happen in a columnwise fashion and
  * be coalesced by the GPU memory manager.
  */
-void __global__ maxKernel(unsigned char *voxels, unsigned char *maxImage, float *localMaxes, float *globalMax, int nRows, int nCols, int nSheets){
+void __global__ maxKernel(unsigned char *voxels, unsigned char *maxImage, float *weightedSums, float *globalMax, int nRows, int nCols, int nSheets){
 
 	/*
 	 * Since the data is in column-major order, the thread IDs correspond
@@ -29,10 +28,10 @@ void __global__ maxKernel(unsigned char *voxels, unsigned char *maxImage, float 
 	 * be constant across its work.
 	 */
 	int myRow = blockDim.x * blockIdx.x + threadIdx.x;
-	int size = nRows*nCols;
+	int myMaxPos = nRows*nCols + myRow;
 	float norm = 1.0/nSheets;
-	unsigned char val = 0;
-	unsigned char localMax = 0;
+	unsigned char val = (unsigned char)0;
+	unsigned char localMax = (unsigned char)0;
 
 	// In case we got rounded up, make sure we have a row to work on.
 	if(myRow < nRows){
@@ -69,34 +68,47 @@ void __global__ maxKernel(unsigned char *voxels, unsigned char *maxImage, float 
 		 *
 		 */
 
+#if DEBUG
+		printf("Thread %d starting, last position visited: %d\n", myRow, (myMaxPos - nRows) + ((nSheets-1)*nRows*nCols));
+#endif
+
 		// TODO this is slightly off, I think I'm not getting all the
 		// data.  Rewrite in terms of row, col, sheet and go from
 		// there.
 
-		for(int curPos = myRow; curPos < size; curPos += nRows){
+		for(int curPos = myRow; curPos < myMaxPos; curPos += nRows){
+
+			if(myRow == 0){
+				printf("Working on position (%d, %d)\n", myRow, curPos / nRows);
+			}
+
+			// Tracking weighted sum
+			weightedSums[curPos] = 0.0;
 
 			for(int sh = 0; sh < nSheets; ++sh){
-				val = voxels[curPos + sh*size];
+				
+				val = voxels[curPos + sh*nRows*nCols];
 
-				// Fill in work for the max image
-				if((int) val > (int)localMax){
+				if(val > localMax){
 					localMax = val;
 				}
-				//localMax = (int)localMax > (int)val ? localMax : val;
 
 				// Fill in work for the sum image, the running
 				// weighted sum along the collapsed dimension
-				localMaxes[curPos] += norm * ((1 + sh)*(int)val);
+				weightedSums[curPos] += norm * ((1 + sh)*(int)val);
+			}
+
+			if(myRow == 0){
+				printf("Sanity check: curpos is %d, next curPos is %d, maxCurPos (non inclusive) is %d", curPos, curPos + nRows, myMaxPos);
 			}
 
 			// Fill in maxImage for this position
 			maxImage[curPos] = localMax;
 
 			// Adjust highest weighted sum seen if necessary
-			globalMax[0] = globalMax[0] > localMaxes[curPos] ? globalMax[0] : localMaxes[curPos];
+			globalMax[0] = globalMax[0] > weightedSums[curPos] ? globalMax[0] : weightedSums[curPos];
 		}
 	}
-
 }
 
 int main(int argc, char **argv){
@@ -129,7 +141,7 @@ int main(int argc, char **argv){
 	unsigned char *d_maxImage, *h_maxImage;
 	unsigned char *d_sumImage, *h_sumImage;
 	int resultSize;
-	float *d_localMaxes;
+	float *d_weightedSums;
 	float *d_globalMax;
 
 	
@@ -177,7 +189,7 @@ int main(int argc, char **argv){
 				h_maxImage = new unsigned char[nCols*nRows];
 				cudaMalloc((void **)&d_maxImage, resultSize);
 				cudaMalloc((void **)&d_sumImage, resultSize);
-				cudaMalloc((void **)&d_localMaxes, nCols*nRows*sizeof(float));
+				cudaMalloc((void **)&d_weightedSums, nCols*nRows*sizeof(float));
 				cudaMalloc((void **)&d_globalMax, sizeof(float));
 			
 				/*
@@ -226,7 +238,7 @@ int main(int argc, char **argv){
 				cout << "Threads per block: " << threadsPerBlock << endl;
 				cout << "Number of blocks: " << blocksPerGrid << endl;
 
-				maxKernel<<<blocksPerGrid, threadsPerBlock>>>(rawImageData, d_maxImage, d_localMaxes, d_globalMax, nRows, nCols, nSheets);
+				maxKernel<<<blocksPerGrid, threadsPerBlock>>>(rawImageData, d_maxImage, d_weightedSums, d_globalMax, nRows, nCols, nSheets);
 			}
 			break;
 		case 2:
@@ -235,7 +247,7 @@ int main(int argc, char **argv){
 			h_maxImage = new unsigned char[nCols*nRows];
 			cudaMalloc((void **)&d_maxImage, resultSize);
 			cudaMalloc((void **)&d_sumImage, resultSize);
-			cudaMalloc((void **)&d_localMaxes, nCols*nRows*sizeof(float));
+			cudaMalloc((void **)&d_weightedSums, nCols*nRows*sizeof(float));
 
 			break;
 		case 3:
@@ -244,7 +256,7 @@ int main(int argc, char **argv){
 			h_maxImage = new unsigned char[nSheets*nRows];
 			cudaMalloc((void **)&d_maxImage, resultSize);
 			cudaMalloc((void **)&d_sumImage, resultSize);
-			cudaMalloc((void **)&d_localMaxes, nSheets*nRows*sizeof(float));
+			cudaMalloc((void **)&d_weightedSums, nSheets*nRows*sizeof(float));
 
 			break;
 		case 4:
@@ -253,7 +265,7 @@ int main(int argc, char **argv){
 			h_maxImage = new unsigned char[nSheets*nRows];
 			cudaMalloc((void **)&d_maxImage, resultSize);
 			cudaMalloc((void **)&d_sumImage, resultSize);
-			cudaMalloc((void **)&d_localMaxes, nSheets*nRows*sizeof(float));
+			cudaMalloc((void **)&d_weightedSums, nSheets*nRows*sizeof(float));
 
 			break;
 		case 5:
@@ -262,7 +274,7 @@ int main(int argc, char **argv){
 			h_maxImage = new unsigned char[nCols*nSheets];
 			cudaMalloc((void **)&d_maxImage, resultSize);
 			cudaMalloc((void **)&d_sumImage, resultSize);
-			cudaMalloc((void **)&d_localMaxes, nCols*nSheets*sizeof(float));
+			cudaMalloc((void **)&d_weightedSums, nCols*nSheets*sizeof(float));
 
 			break;
 		case 6:
@@ -271,7 +283,7 @@ int main(int argc, char **argv){
 			h_maxImage = new unsigned char[nCols*nSheets];
 			cudaMalloc((void **)&d_maxImage, resultSize);
 			cudaMalloc((void **)&d_sumImage, resultSize);
-			cudaMalloc((void **)&d_localMaxes, nCols*nSheets*sizeof(float));
+			cudaMalloc((void **)&d_weightedSums, nCols*nSheets*sizeof(float));
 
 			break;
 		default:
@@ -289,6 +301,7 @@ int main(int argc, char **argv){
 	/*
 	 * Write results
 	 */
+	//writeImage(argv[6] + std::string("_max.png"), h_maxImage, projType, nCols, nRows,nSheets);
 	writeImage(argv[6] + std::string("_max.png"), h_maxImage, projType, nRows, nCols, nSheets);
 	//writeImage("sum.png", h_sumImage, projType, nRows, nCols, nSheets);
 	
@@ -299,7 +312,7 @@ int main(int argc, char **argv){
 	delete [] rawImageData;
 	cudaFree(d_maxImage);
 	cudaFree(d_sumImage);
-	cudaFree(d_localMaxes);
+	cudaFree(d_weightedSums);
 	cudaFree(d_globalMax);
 
 	return 0;
