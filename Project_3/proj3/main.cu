@@ -6,7 +6,7 @@
 #include "helpers.h"
 #include <cmath>
 
-#define DEBUG 1
+#define DEBUG 1 
 #define DEVICE_NUM 0
 
 using namespace std;
@@ -22,12 +22,8 @@ void __global__ kernelMaxImage(unsigned char *voxels, unsigned char *maxImage, f
 
 	for(int sh = 0; sh < nSheets; sh++){
 		curVal = voxels[myPos + sh*imageSize];
-		
-		if(curVal > localMax){
-			localMax = curVal;
-		}
+		localMax = curVal > localMax ? curVal : localMax;	
 		weightedSum += norm * curVal * (sh+1);
-		//weightedSum += norm * curVal*(nSheets - sh);
 	}
 
 	// Update output image for my pixel
@@ -46,15 +42,8 @@ void __global__ kernelSumImage(float *weightedSums, unsigned char *sumImage, flo
 	float max = globalMax[0];
 	float localMax = weightedSums[myPos];
 	int result = (int)((localMax/max)*255.0);
-	float diff = (localMax - max);
-	if(diff < 0){
-		diff *= -1.0;
-	}
-	//printf("Norm is %f, myVal is %f", norm, weightedSums[myPos]);
+	
 	// Formula : output = round( (p/globalMax)*255.0  )
-	if((max - localMax) < 0.001){
-		printf("MyPos: %d, globalMax: %f, localMax: %f, result: %d\n", myPos, max, localMax, result);
-	}
 	sumImage[myPos] = result;
 }
 
@@ -124,11 +113,22 @@ int main(int argc, char **argv){
 	projection(rawImageData, nRows, nCols, nSheets, projType);
 	validate(cudaMemcpy(d_voxels, rawImageData, nVals*sizeof(unsigned char),cudaMemcpyHostToDevice));
 
+#if DEBUG
+	if(projType < 3){
+		//dumpSheet(rawImageData, projType, nRows, nCols, nSheets, 26);
+		for(int sh = 0; sh < nSheets; ++sh){
+			dumpSheet(rawImageData, projType, nRows, nCols, nSheets, sh);
+		}
+	}
+#endif
+
 	// Issue kernels
 	switch(projType){
 		case 1:	// Note: need braces to restrict scope of the local variables
+		case 2:
 			{
 				cout << "Projection type " << projType << endl;
+				cout << "Output image will be " << nCols <<"x" << nRows << endl;
 				resultSize = nCols*nRows*sizeof(unsigned char);
 				h_maxImage = new unsigned char[nCols*nRows];
 				h_sumImage = new unsigned char[nCols*nRows];
@@ -146,49 +146,11 @@ int main(int argc, char **argv){
 				validate(cudaDeviceSynchronize());
 			}
 			break;
-		case 2:
-			{
-				cout << "Projection type " << projType << endl;
-				resultSize = nCols*nRows*sizeof(unsigned char);
-				h_maxImage = new unsigned char[nCols*nRows];
-				h_sumImage = new unsigned char[nCols*nRows];
-				validate(cudaMalloc((void **)&d_maxImage, resultSize));
-				validate(cudaMalloc((void **)&d_sumImage, resultSize));
-				validate(cudaMalloc((void **)&d_weightedSums, nCols*nRows*sizeof(float)));
-				validate(cudaMalloc((void **)&d_globalMax, sizeof(float)));
-				
-				kernelMaxImage<<<nCols, nRows>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nSheets);
-				validate(cudaPeekAtLastError()); // Check invalid launch
-				validate(cudaDeviceSynchronize()); // Check runtime error
-	
-				kernelSumImage<<<nCols, nRows>>>(d_weightedSums, d_sumImage, d_globalMax);
-				validate(cudaPeekAtLastError());
-				validate(cudaDeviceSynchronize());
-			}
-			break;
 		case 3:
-			{
-				cout << "Projection type " << projType << endl;
-				resultSize = nSheets*nRows*sizeof(unsigned char);
-				h_maxImage = new unsigned char[nSheets*nRows];
-				h_sumImage = new unsigned char[nSheets*nRows];
-				validate(cudaMalloc((void **)&d_maxImage, resultSize));
-				validate(cudaMalloc((void **)&d_sumImage, resultSize));
-				validate(cudaMalloc((void **)&d_weightedSums, nSheets*nRows*sizeof(float)));
-				validate(cudaMalloc((void **)&d_globalMax, sizeof(float)));
-				
-				kernelMaxImage<<<nSheets, nRows>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nSheets);
-				validate(cudaPeekAtLastError()); // Check invalid launch
-				validate(cudaDeviceSynchronize()); // Check runtime error
-	
-				kernelSumImage<<<nSheets, nRows>>>(d_weightedSums, d_sumImage, d_globalMax);
-				validate(cudaPeekAtLastError());
-				validate(cudaDeviceSynchronize());
-			}
-			break;
 		case 4:
 			{
 				cout << "Projection type " << projType << endl;
+				cout << "Output image will be " << nSheets <<"x" << nRows << endl;
 				resultSize = nSheets*nRows*sizeof(unsigned char);
 				h_maxImage = new unsigned char[nSheets*nRows];
 				h_sumImage = new unsigned char[nSheets*nRows];
@@ -197,7 +159,7 @@ int main(int argc, char **argv){
 				validate(cudaMalloc((void **)&d_weightedSums, nSheets*nRows*sizeof(float)));
 				validate(cudaMalloc((void **)&d_globalMax, sizeof(float)));
 				
-				kernelMaxImage<<<nSheets, nRows>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nSheets);
+				kernelMaxImage<<<nSheets, nRows>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nCols);
 				validate(cudaPeekAtLastError()); // Check invalid launch
 				validate(cudaDeviceSynchronize()); // Check runtime error
 	
@@ -207,28 +169,10 @@ int main(int argc, char **argv){
 			}
 			break;
 		case 5:
-			{
-				cout << "Projection type " << projType << endl;
-				resultSize = nCols*nSheets*sizeof(unsigned char);
-				h_maxImage = new unsigned char[nCols*nSheets];
-				h_sumImage = new unsigned char[nCols*nSheets];
-				validate(cudaMalloc((void **)&d_maxImage, resultSize));
-				validate(cudaMalloc((void **)&d_sumImage, resultSize));
-				validate(cudaMalloc((void **)&d_weightedSums, nCols*nSheets*sizeof(float)));
-				validate(cudaMalloc((void **)&d_globalMax, sizeof(float)));
-				
-				kernelMaxImage<<<nCols, nSheets>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nSheets);
-				validate(cudaPeekAtLastError()); // Check invalid launch
-				validate(cudaDeviceSynchronize()); // Check runtime error
-	
-				kernelSumImage<<<nCols, nSheets>>>(d_weightedSums, d_sumImage, d_globalMax);
-				validate(cudaPeekAtLastError());
-				validate(cudaDeviceSynchronize());
-			}
-			break;
 		case 6:
 			{
 				cout << "Projection type " << projType << endl;
+				cout << "Output image will be " << nCols <<"x" << nSheets << endl;
 				resultSize = nCols*nSheets*sizeof(unsigned char);
 				h_maxImage = new unsigned char[nCols*nSheets];
 				h_sumImage = new unsigned char[nCols*nSheets];
@@ -237,7 +181,7 @@ int main(int argc, char **argv){
 				validate(cudaMalloc((void **)&d_weightedSums, nCols*nSheets*sizeof(float)));
 				validate(cudaMalloc((void **)&d_globalMax, sizeof(float)));
 				
-				kernelMaxImage<<<nCols, nSheets>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nSheets);
+				kernelMaxImage<<<nCols, nSheets>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nRows);
 				validate(cudaPeekAtLastError()); // Check invalid launch
 				validate(cudaDeviceSynchronize()); // Check runtime error
 	
@@ -258,15 +202,20 @@ int main(int argc, char **argv){
 	validate(cudaMemcpy(h_maxImage, d_maxImage, resultSize, cudaMemcpyDeviceToHost)); 
 	validate(cudaMemcpy(h_sumImage, d_sumImage, resultSize, cudaMemcpyDeviceToHost)); 
 
+	cout << "GETTING RESULTS" << endl;
+
 	/*
 	 * Write results
 	 */
-	writeImage(argv[6] + std::string("_max.png"), h_maxImage, projType, nRows, nCols, nSheets);
-	writeImage(argv[6] + std::string("_sum.png"), h_sumImage, projType, nRows, nCols, nSheets);
+	writeImage(argv[6] + std::string("_max.png"), h_maxImage, projType, nCols, nRows, nSheets);
+	writeImage(argv[6] + std::string("_sum.png"), h_sumImage, projType, nCols, nRows, nSheets);
+
+	cout << "CLEANING UP" << endl;
 
 	/*
 	 * Clean up
 	 */
+	validate(cudaDeviceSynchronize()); // Check runtime error
 	cudaFree(d_maxImage);
 	cudaFree(d_sumImage);
 	cudaFree(d_weightedSums);

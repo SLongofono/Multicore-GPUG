@@ -87,25 +87,14 @@ inline void gpuAssert(cudaError_t code, const char *filename, int line, bool abo
 		}
 	}
 	else{
+#if DEBUG
 		std::cout << "SUCCESS: line " << line << " in " << filename << std::endl;
+#endif
 	}
 }
 
 // Use a macro so we can access file and line information
 #define validate(answer) { gpuAssert((answer),__FILE__, __LINE__); }
-
-
-/*
- * Simplest logfile approach for debugging
- */
-void log(std::string filename, std::string s){
-	std::ofstream outfile;
-	outfile.open(filename, std::ios_base::app);
-	if(outfile.good()){
-		outfile << s << std::endl;
-	}
-	outfile.close();
-}
 
 
 /*
@@ -124,7 +113,7 @@ void projection(unsigned char *data, int nRows, int nCols, int nSheets, int proj
 	int newX, newY, newZ;
 	int newRows, newCols, newSheets;
 	int nVals = nRows*nCols*nSheets;
-	int *work = new int[nVals];
+	unsigned char *work = new unsigned char[nVals];
 	for(int i = 0; i < nVals; ++i){
 		work[i] = data[i];
 	}
@@ -194,19 +183,16 @@ void projection(unsigned char *data, int nRows, int nCols, int nSheets, int proj
 }
 
 
-/*
- * Transposes flattened 2D matrix from column major to row major
- */
-void transpose(unsigned char *data, int rows, int cols){
-	int nVals = rows*cols;
+void transpose(unsigned char *data, int N, int M){
+	int nVals = N*M;
 	unsigned char *work = new unsigned char[nVals];
 	for(int i = 0; i < nVals; ++i){
 		work[i] = data[i];
 	}
-	for(int r = 0; r < rows; ++r){
-		for(int c = 0; c < cols; ++c){
-			data[c*rows + r] = work[r*cols + c];
-		}
+	for(int n = 0; n < nVals; ++n){
+		int i = n/N;
+		int j = n%N;
+		data[n] = work[M*j + i];
 	}
 	delete [] work;
 }
@@ -262,3 +248,13 @@ void writeImage(std::string fileName, unsigned char *data, int projection, int n
 	}
 }
 
+
+void dumpSheet(unsigned char *data, int projection, int nRows, int nCols, int nSheets, int sheetNo){
+	unsigned char * work = new unsigned char[nRows * nCols];
+	for(int r = 0; r < nRows; ++r){
+		for(int c = 0; c < nCols; ++c){
+			work[c*nRows + r] = data[c*nRows + r + sheetNo*nRows*nCols];
+		}
+	}
+	writeImage(std::string("sheet_") + std::to_string(sheetNo) + std::string(".png"), work, projection, nRows, nCols, nSheets);
+}
