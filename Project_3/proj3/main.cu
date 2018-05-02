@@ -147,49 +147,104 @@ int main(int argc, char **argv){
 			}
 			break;
 		case 2:
-			cout << "Projection type " << projType << endl;
-			resultSize = nCols*nRows*sizeof(unsigned char);
-			h_maxImage = new unsigned char[nCols*nRows];
-			cudaMalloc((void **)&d_maxImage, resultSize);
-			cudaMalloc((void **)&d_sumImage, resultSize);
-			cudaMalloc((void **)&d_weightedSums, nCols*nRows*sizeof(float));
-
+			{
+				cout << "Projection type " << projType << endl;
+				resultSize = nCols*nRows*sizeof(unsigned char);
+				h_maxImage = new unsigned char[nCols*nRows];
+				h_sumImage = new unsigned char[nCols*nRows];
+				validate(cudaMalloc((void **)&d_maxImage, resultSize));
+				validate(cudaMalloc((void **)&d_sumImage, resultSize));
+				validate(cudaMalloc((void **)&d_weightedSums, nCols*nRows*sizeof(float)));
+				validate(cudaMalloc((void **)&d_globalMax, sizeof(float)));
+				
+				kernelMaxImage<<<nCols, nRows>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nSheets);
+				validate(cudaPeekAtLastError()); // Check invalid launch
+				validate(cudaDeviceSynchronize()); // Check runtime error
+	
+				kernelSumImage<<<nCols, nRows>>>(d_weightedSums, d_sumImage, d_globalMax);
+				validate(cudaPeekAtLastError());
+				validate(cudaDeviceSynchronize());
+			}
 			break;
 		case 3:
-			cout << "Projection type " << projType << endl;
-			resultSize = nSheets*nRows*sizeof(unsigned char);
-			h_maxImage = new unsigned char[nSheets*nRows];
-			cudaMalloc((void **)&d_maxImage, resultSize);
-			cudaMalloc((void **)&d_sumImage, resultSize);
-			cudaMalloc((void **)&d_weightedSums, nSheets*nRows*sizeof(float));
-
+			{
+				cout << "Projection type " << projType << endl;
+				resultSize = nSheets*nRows*sizeof(unsigned char);
+				h_maxImage = new unsigned char[nSheets*nRows];
+				h_sumImage = new unsigned char[nSheets*nRows];
+				validate(cudaMalloc((void **)&d_maxImage, resultSize));
+				validate(cudaMalloc((void **)&d_sumImage, resultSize));
+				validate(cudaMalloc((void **)&d_weightedSums, nSheets*nRows*sizeof(float)));
+				validate(cudaMalloc((void **)&d_globalMax, sizeof(float)));
+				
+				kernelMaxImage<<<nSheets, nRows>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nSheets);
+				validate(cudaPeekAtLastError()); // Check invalid launch
+				validate(cudaDeviceSynchronize()); // Check runtime error
+	
+				kernelSumImage<<<nSheets, nRows>>>(d_weightedSums, d_sumImage, d_globalMax);
+				validate(cudaPeekAtLastError());
+				validate(cudaDeviceSynchronize());
+			}
 			break;
 		case 4:
-			cout << "Projection type " << projType << endl;
-			resultSize = nSheets*nRows*sizeof(unsigned char);
-			h_maxImage = new unsigned char[nSheets*nRows];
-			cudaMalloc((void **)&d_maxImage, resultSize);
-			cudaMalloc((void **)&d_sumImage, resultSize);
-			cudaMalloc((void **)&d_weightedSums, nSheets*nRows*sizeof(float));
-
+			{
+				cout << "Projection type " << projType << endl;
+				resultSize = nSheets*nRows*sizeof(unsigned char);
+				h_maxImage = new unsigned char[nSheets*nRows];
+				h_sumImage = new unsigned char[nSheets*nRows];
+				validate(cudaMalloc((void **)&d_maxImage, resultSize));
+				validate(cudaMalloc((void **)&d_sumImage, resultSize));
+				validate(cudaMalloc((void **)&d_weightedSums, nSheets*nRows*sizeof(float)));
+				validate(cudaMalloc((void **)&d_globalMax, sizeof(float)));
+				
+				kernelMaxImage<<<nSheets, nRows>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nSheets);
+				validate(cudaPeekAtLastError()); // Check invalid launch
+				validate(cudaDeviceSynchronize()); // Check runtime error
+	
+				kernelSumImage<<<nSheets, nRows>>>(d_weightedSums, d_sumImage, d_globalMax);
+				validate(cudaPeekAtLastError());
+				validate(cudaDeviceSynchronize());
+			}
 			break;
 		case 5:
-			cout << "Projection type " << projType << endl;
-			resultSize = nCols*nSheets*sizeof(unsigned char);
-			h_maxImage = new unsigned char[nCols*nSheets];
-			cudaMalloc((void **)&d_maxImage, resultSize);
-			cudaMalloc((void **)&d_sumImage, resultSize);
-			cudaMalloc((void **)&d_weightedSums, nCols*nSheets*sizeof(float));
-
+			{
+				cout << "Projection type " << projType << endl;
+				resultSize = nCols*nSheets*sizeof(unsigned char);
+				h_maxImage = new unsigned char[nCols*nSheets];
+				h_sumImage = new unsigned char[nCols*nSheets];
+				validate(cudaMalloc((void **)&d_maxImage, resultSize));
+				validate(cudaMalloc((void **)&d_sumImage, resultSize));
+				validate(cudaMalloc((void **)&d_weightedSums, nCols*nSheets*sizeof(float)));
+				validate(cudaMalloc((void **)&d_globalMax, sizeof(float)));
+				
+				kernelMaxImage<<<nCols, nSheets>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nSheets);
+				validate(cudaPeekAtLastError()); // Check invalid launch
+				validate(cudaDeviceSynchronize()); // Check runtime error
+	
+				kernelSumImage<<<nCols, nSheets>>>(d_weightedSums, d_sumImage, d_globalMax);
+				validate(cudaPeekAtLastError());
+				validate(cudaDeviceSynchronize());
+			}
 			break;
 		case 6:
-			cout << "Projection type " << projType << endl;
-			resultSize = nCols*nSheets*sizeof(unsigned char);
-			h_maxImage = new unsigned char[nCols*nSheets];
-			cudaMalloc((void **)&d_maxImage, resultSize);
-			cudaMalloc((void **)&d_sumImage, resultSize);
-			cudaMalloc((void **)&d_weightedSums, nCols*nSheets*sizeof(float));
-
+			{
+				cout << "Projection type " << projType << endl;
+				resultSize = nCols*nSheets*sizeof(unsigned char);
+				h_maxImage = new unsigned char[nCols*nSheets];
+				h_sumImage = new unsigned char[nCols*nSheets];
+				validate(cudaMalloc((void **)&d_maxImage, resultSize));
+				validate(cudaMalloc((void **)&d_sumImage, resultSize));
+				validate(cudaMalloc((void **)&d_weightedSums, nCols*nSheets*sizeof(float)));
+				validate(cudaMalloc((void **)&d_globalMax, sizeof(float)));
+				
+				kernelMaxImage<<<nCols, nSheets>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nSheets);
+				validate(cudaPeekAtLastError()); // Check invalid launch
+				validate(cudaDeviceSynchronize()); // Check runtime error
+	
+				kernelSumImage<<<nCols, nSheets>>>(d_weightedSums, d_sumImage, d_globalMax);
+				validate(cudaPeekAtLastError());
+				validate(cudaDeviceSynchronize());
+			}
 			break;
 		default:
 			cerr << "[ error ] '" << projType << "' is not a valid projection type, please select from [1,6]" << endl;

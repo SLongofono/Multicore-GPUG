@@ -147,7 +147,7 @@ void projection(unsigned char *data, int nRows, int nCols, int nSheets, int proj
 						newRows = nRows;
 						newCols = nSheets;
 						newSheets = nCols;
-						newX = newCols - z - 1;
+						newX = z;
 						newY = y;
 						newZ = newSheets - x - 1;
 						break;
@@ -197,16 +197,16 @@ void projection(unsigned char *data, int nRows, int nCols, int nSheets, int proj
 /*
  * Transposes flattened 2D matrix from column major to row major
  */
-void transpose(unsigned char *data, int N, int M){
-	int nVals = N*M;
+void transpose(unsigned char *data, int rows, int cols){
+	int nVals = rows*cols;
 	unsigned char *work = new unsigned char[nVals];
 	for(int i = 0; i < nVals; ++i){
 		work[i] = data[i];
 	}
-	for(int i = 0; i < nVals; ++i){
-		int j = i/N;
-		int k = i%N;
-		data[i] = work[M*k + j];
+	for(int r = 0; r < rows; ++r){
+		for(int c = 0; c < cols; ++c){
+			data[c*rows + r] = work[r*cols + c];
+		}
 	}
 	delete [] work;
 }
@@ -246,7 +246,7 @@ void writeImage(std::string fileName, unsigned char *data, int projection, int n
 	switch(projection){
 		case 1:
 		case 2:
-			transpose(data, nRows, nCols);
+			transpose(data, nCols, nRows);
 			writeFile(fileName, nCols, nRows, data);
 			break;
 		case 3:
