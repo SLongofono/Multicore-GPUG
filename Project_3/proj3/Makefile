@@ -235,7 +235,7 @@ IMAGE13=64 64 512 ../voxeldata/shockwave.raw
 IMAGE14=34 98 34 ../voxeldata/silicium.raw
 IMAGE15=256 256 256 ../voxeldata/skull.raw
 IMAGE16=341 341 93 ../voxeldata/statueLeg.raw
-IMAGE17=512 512 174 ../voxeldata/bonsai.raw
+IMAGE17=512 512 174 ../voxeldata/stent8.raw
 
 project3: main.o ../lib/libCOGLImageWriter.so
 	$(MAKE) -C ../ImageWriter
@@ -251,6 +251,26 @@ main.o: main.cu helpers.h kernels.h
 #main.o:	main.cpp 
 #	$(CPP) $(CFLAGS) -I$(INCL) -c $+ -o $@
 #
+
+testProj1:
+	PT=1
+	test1
+	test2
+	test3
+	test4
+	test5
+	test6
+	test7
+	test8
+	test9
+	test10
+	test11
+	test12
+	test13
+	test14
+	test15
+	test16
+	test17
 
 test1:
 	@echo "============================================================\nTesting Image aneurism\n============================================================"

@@ -141,7 +141,7 @@ int main(int argc, char **argv){
 				validate(cudaPeekAtLastError()); // Check invalid launch
 				validate(cudaDeviceSynchronize()); // Check runtime error
 
-				kernelSumImage<<<nCols,nRows>>>(d_weightedSums, d_sumImage, d_globalMax);
+				kernelSumImage<<<nCols, nRows>>>(d_weightedSums, d_sumImage, d_globalMax);
 				validate(cudaPeekAtLastError());
 				validate(cudaDeviceSynchronize());
 			}
@@ -209,7 +209,6 @@ int main(int argc, char **argv){
 	//writeImage(argv[6] + std::string("_max.png"), h_maxImage, projType, nCols, nRows,nSheets);
 	writeImage(argv[6] + std::string("_max.png"), h_maxImage, projType, nRows, nCols, nSheets);
 	writeImage(argv[6] + std::string("_sum.png"), h_sumImage, projType, nRows, nCols, nSheets);
-	
 
 	/*
 	 * Clean up
@@ -219,6 +218,9 @@ int main(int argc, char **argv){
 	cudaFree(d_sumImage);
 	cudaFree(d_weightedSums);
 	cudaFree(d_globalMax);
+
+	delete [] h_maxImage;
+	delete [] h_sumImage;
 
 	return 0;
 }
