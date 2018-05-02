@@ -206,19 +206,18 @@ int main(int argc, char **argv){
 	/*
 	 * Write results
 	 */
-	//writeImage(argv[6] + std::string("_max.png"), h_maxImage, projType, nCols, nRows,nSheets);
 	writeImage(argv[6] + std::string("_max.png"), h_maxImage, projType, nRows, nCols, nSheets);
 	writeImage(argv[6] + std::string("_sum.png"), h_sumImage, projType, nRows, nCols, nSheets);
 
 	/*
 	 * Clean up
 	 */
-	delete [] rawImageData;
 	cudaFree(d_maxImage);
 	cudaFree(d_sumImage);
 	cudaFree(d_weightedSums);
 	cudaFree(d_globalMax);
 
+	delete [] rawImageData;
 	delete [] h_maxImage;
 	delete [] h_sumImage;
 
