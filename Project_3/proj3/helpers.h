@@ -74,27 +74,6 @@ cudaDeviceProp *getDevice(int deviceNum){
 }
 
 
-/*
- * Uses heuristic approach to select grid dimensions
- */
-dim3 getGridGeometry(int nRows, int nCols, int nSheets, int projection){
-	cudaDeviceProp *myDevice = getDevice(0);
-	int xDim, yDim, zDim;
-	dim3 ret(1,2,3);
-	return ret;
-}
-
-
-/*
- * Uses heuristic approach to select block dimensions
- */
-dim3 getBlockGeometry(int nRows, int nCols, int nSheets, int projection){
-	cudaDeviceProp *myDevice = getDevice(0);
-	int xDim, yDim, zDim;
-	dim3 ret(1,2,3);
-	return ret;
-}
-
 // Error handler from
 // https://stackoverflow.com/questions/14038589/what-is-the-canonical-way-to-check-for-errors-using-the-cuda-runtime-api
 inline void gpuAssert(cudaError_t code, const char *filename, int line, bool abort=true){
@@ -141,7 +120,7 @@ void projection(unsigned char *data, int nRows, int nCols, int nSheets, int proj
 		return;
 	}
 	
-	int curPos, newPos, temp;
+	int curPos, newPos;
 	int newX, newY, newZ;
 	int newRows, newCols, newSheets;
 	int nVals = nRows*nCols*nSheets;

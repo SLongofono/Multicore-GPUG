@@ -12,129 +12,52 @@
 using namespace std;
 
 
-/*
- * The max image kernel
- *
- * Each thread will collapse one pixel of the result matrix.  This apporach
- * allows the collective memory accesses to happen in a columnwise fashion and
- * be coalesced by the GPU memory manager.
- */
-void __global__ maxKernel(unsigned char *voxels, unsigned char *maxImage, float *weightedSums, float *globalMax, int nRows, int nCols, int nSheets){
-
-	/*
-	 * Since the data is in column-major order, the thread IDs correspond
-	 * to the initial position in the first column of the first sheet.
-	 * That is, each thread will have a different row, and that row will
-	 * be constant across its work.
-	 */
-	int myRow = blockDim.x * blockIdx.x + threadIdx.x;
-	int myMaxPos = nRows*nCols + myRow;
+void __global__ kernelMaxImage(unsigned char *voxels, unsigned char *maxImage, float *weightedSums, float *globalMax, int nSheets){
+	int myPos = blockIdx.x*blockDim.x + threadIdx.x;
+	int localMax = 0;
 	float norm = 1.0/nSheets;
-	unsigned char val = (unsigned char)0;
-	unsigned char localMax = (unsigned char)0;
-	int size = nRows*nCols;
+	float weightedSum = 0.0;
+	int imageSize = gridDim.x*blockDim.x;
+	unsigned char curVal;
 
-	int outputSize = size;
-	int voxelSize = nRows*nCols*nSheets;
-
-	// In case we got rounded up, make sure we have a row to work on.
-//	if(myRow < nRows){
-	if(myRow == 0){ // Just have thread 0 fire to simplify debugging
-
-		/*
-		 * The data is stored in column-major order, so we
-		 * need to ensure that SIMD threads are accessing the
-		 * data in the same way to exploit coalesced memory
-		 * access.
-		 *
-		 * Thus we want each thread to be responsible for a
-		 * row, and iterate over all columns, all sheets in
-		 * that row.  Effectively, each thread will handle
-		 * collapsing the slice formed by its row across all
-		 * the sheets
-		 *
-		 * Each thread starts its work at the 0th column, in
-		 * its row, which is naturally aligned to the thread
-		 * index if we use a 1D kernel.
-		 *
-		 * Each thread will increment over columns, each
-		 * column starting nRows from the start of the previous one.
-		 *
-		 * For each column, each thread will increment over all
-		 * sheets, in increments of nRows*nCols.
-		 *
-		 * The position each thread is responsible for is determined
-		 * from the rows and columns; Each thread has a fixed row, and
-		 * as we progress through the columns the column is updated.
-		 * We follow the column-major convention, so the position is
-		 * determined as thisCol*nRows + thisRow.  The same is used to
-		 * store the maximum for each position in the final image, for
-		 * use in the sum kernel
-		 *
-		 */
-
-		// TODO this is slightly off, I think I'm not getting all the
-		// data.  Rewrite in terms of row, col, sheet and go from
-		// there.
-		for(int c = 0; c < nCols; ++c){
-
-
-		//for(int curPos = myRow; curPos < myMaxPos; curPos += nRows){
-
-			// Current position wrt output image
-			int curPos = myRow + c*nRows;
-
-			if(curPos >= size){
-				printf("ERROR!  curPos %d is invalid for limit %d!\n", curPos, size);
-			}
-			printf("Working on position (%d, %d)\n", myRow, curPos / nRows);
-
-			printf("A!\n");
-
-			// Tracking weighted sum
-			weightedSums[curPos] = 0.0;
-			printf("B!\n");
-
-			for(int sh = 0; sh < nSheets; ++sh){
-			
-				if( (curPos + sh*size) >= voxelSize){
-					printf("ERROR! voxel index %d is invalid for limit %d!\n", curPos+sh*size, voxelSize);
-					
-				}
-				printf("Voxel index: %d, max %d\n", curPos + sh*nRows*nCols, voxelSize);
-
-				val = voxels[curPos + sh*nRows*nCols];
-				printf("C!\n");
-
-				if(val > localMax){
-					localMax = val;
-				}
-
-				// Fill in work for the sum image, the running
-				// weighted sum along the collapsed dimension
-				weightedSums[curPos] += norm * ((1 + sh)*(int)val);
-				printf("D!\n");
-			}
-
-			if(myRow == 0){
-				printf("Sanity check: curpos is %d, next curPos is %d, maxCurPos (non inclusive) is %d\n", curPos, curPos + nRows, myMaxPos);
-			}
-			printf("E!\n");
-
-			// Fill in maxImage for this position
-			maxImage[curPos] = localMax;
-			printf("F!\n");
-
-			localMax = 0;
-			
-			printf("G!\n");
-			// Adjust highest weighted sum seen if necessary
-			atomicMax(globalMax, weightedSums[curPos]);
-			printf("H!\n");
+	for(int sh = 0; sh < nSheets; sh++){
+		curVal = voxels[myPos + sh*imageSize];
+		
+		if(curVal > localMax){
+			localMax = curVal;
 		}
+		weightedSum += norm * curVal * (sh+1);
+		//weightedSum += norm * curVal*(nSheets - sh);
 	}
-	printf("KERNEL SUCCESS, THREAD %d\n", myRow);
+
+	// Update output image for my pixel
+	maxImage[myPos] = localMax;
+
+	// Update weighted sums for my pixel
+	weightedSums[myPos] = weightedSum;
+
+	// Update global Max
+	atomicMax(globalMax, weightedSum);
 }
+
+
+void __global__ kernelSumImage(float *weightedSums, unsigned char *sumImage, float *globalMax){
+	int myPos = blockIdx.x*blockDim.x + threadIdx.x;
+	float max = globalMax[0];
+	float localMax = weightedSums[myPos];
+	int result = (int)((localMax/max)*255.0);
+	float diff = (localMax - max);
+	if(diff < 0){
+		diff *= -1.0;
+	}
+	//printf("Norm is %f, myVal is %f", norm, weightedSums[myPos]);
+	// Formula : output = round( (p/globalMax)*255.0  )
+	if((max - localMax) < 0.001){
+		printf("MyPos: %d, globalMax: %f, localMax: %f, result: %d\n", myPos, max, localMax, result);
+	}
+	sumImage[myPos] = result;
+}
+
 
 int main(int argc, char **argv){
 	
@@ -161,7 +84,7 @@ int main(int argc, char **argv){
 	nSheets = atoi(argv[3]);
 	projType = atoi(argv[5]);
 	nVals = nRows * nCols * nSheets;
-	unsigned char *rawImageData = new unsigned char[nVals];	
+	unsigned char *rawImageData = new unsigned char[nVals]();	
 	unsigned char *d_voxels;
 	unsigned char *d_maxImage, *h_maxImage;
 	unsigned char *d_sumImage, *h_sumImage;
@@ -208,60 +131,19 @@ int main(int argc, char **argv){
 				cout << "Projection type " << projType << endl;
 				resultSize = nCols*nRows*sizeof(unsigned char);
 				h_maxImage = new unsigned char[nCols*nRows];
+				h_sumImage = new unsigned char[nCols*nRows];
 				validate(cudaMalloc((void **)&d_maxImage, resultSize));
 				validate(cudaMalloc((void **)&d_sumImage, resultSize));
 				validate(cudaMalloc((void **)&d_weightedSums, nCols*nRows*sizeof(float)));
 				validate(cudaMalloc((void **)&d_globalMax, sizeof(float)));
 			
-				/*
-				 * On selecting sizes
-				 * 
-				 * We really don't have enough work to make
-				 * great use of the GPU here.  Ideally, we
-				 * want enough blocks such that each SM has
-				 * several blocks to run, some multiple of the
-				 * number of schedulers.  However, we also
-				 * need to balance the divison of work such
-				 * that we don't incur too much overhead
-				 * managing the blocks.  In this case, there
-				 * isn't much work to be done, so the overhead
-				 * is relatively large to the workload.
-				 */
-
-				// Threads per block should be a multiple of warp size
-				int warpsize = 32;
-
-				//  Number of warp schedulers is important
-				int numWarpSchedulers = 2;
-
-				// Cannot exceed this
-				int maxThreadsPerSM = 1536;
-
-				// We want each thread to do one row so it has
-				// sufficient work
-				int numThreads = nRows;
-
-				// We have little internal memory and no
-				// shared memory, so these are irrelevant
-				
-				// first approximation
-				int threadsPerBlock = warpsize * numWarpSchedulers;
-				
-				// Bounds check
-				threadsPerBlock = threadsPerBlock <= maxThreadsPerSM ? threadsPerBlock : maxThreadsPerSM;
-					
-				// Total number of threads divided by threads
-				// per block dictates blocks per grid.
-				int blocksPerGrid = ceil(numThreads/threadsPerBlock);
-
-				cout << "Launching kernel..." << endl;
-				cout << "Total threads: " << numThreads << endl;
-				cout << "Threads per block: " << threadsPerBlock << endl;
-				cout << "Number of blocks: " << blocksPerGrid << endl;
-
-				maxKernel<<<blocksPerGrid, threadsPerBlock>>>(rawImageData, d_maxImage, d_weightedSums, d_globalMax, nRows, nCols, nSheets);
+				kernelMaxImage<<<nCols, nRows>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nSheets);
 				validate(cudaPeekAtLastError()); // Check invalid launch
 				validate(cudaDeviceSynchronize()); // Check runtime error
+
+				kernelSumImage<<<nCols,nRows>>>(d_weightedSums, d_sumImage, d_globalMax);
+				validate(cudaPeekAtLastError());
+				validate(cudaDeviceSynchronize());
 			}
 			break;
 		case 2:
@@ -319,14 +201,14 @@ int main(int argc, char **argv){
 	 * Retrieve results
 	 */
 	validate(cudaMemcpy(h_maxImage, d_maxImage, resultSize, cudaMemcpyDeviceToHost)); 
-	//cudaMemcpy(h_sumImage, d_sumImage, resultSize, cudaMemcpyDeviceToHost); 
+	validate(cudaMemcpy(h_sumImage, d_sumImage, resultSize, cudaMemcpyDeviceToHost)); 
 
 	/*
 	 * Write results
 	 */
 	//writeImage(argv[6] + std::string("_max.png"), h_maxImage, projType, nCols, nRows,nSheets);
 	writeImage(argv[6] + std::string("_max.png"), h_maxImage, projType, nRows, nCols, nSheets);
-	//writeImage("sum.png", h_sumImage, projType, nRows, nCols, nSheets);
+	writeImage(argv[6] + std::string("_sum.png"), h_sumImage, projType, nRows, nCols, nSheets);
 	
 
 	/*
