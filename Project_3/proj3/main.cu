@@ -150,7 +150,7 @@ int main(int argc, char **argv){
 				validate(cudaMalloc((void **)&d_weightedSums, nSheets*nRows*sizeof(float)));
 				validate(cudaMalloc((void **)&d_globalMax, sizeof(float)));
 				
-				kernelMaxImage<<<nSheets, nRows>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nCols);
+				kernelMaxImage<<<nSheets,nRows>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nCols);
 				//kernelMaxImage<<<nSheets, nRows>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nCols);
 				validate(cudaPeekAtLastError()); // Check invalid launch
 				validate(cudaDeviceSynchronize()); // Check runtime error

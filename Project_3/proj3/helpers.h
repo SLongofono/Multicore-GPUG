@@ -17,6 +17,7 @@ __device__ static float atomicMax(float *address, float val){
 	return __int_as_float(old);
 }
 
+
 /*
  * Dumps device information
  */
@@ -184,8 +185,9 @@ void projection(unsigned char *data, int nRows, int nCols, int nSheets, int proj
 
 
 /*
- *  * Transposes flattened 2D matrix from column major to row major
- *   */
+ * Transposes flattened 2D matrix from column major to row major
+ */
+/*
 void transpose(unsigned char *data, int rows, int cols){
 	int nVals = rows*cols;
 	unsigned char *work = new unsigned char[nVals];
@@ -194,13 +196,13 @@ void transpose(unsigned char *data, int rows, int cols){
 	}
 	for(int r = 0; r < rows; ++r){
 		for(int c = 0; c < cols; ++c){
-			work[r*cols + c] = data[c*rows + r];
-			//data[c*rows + r] = work[r*cols + c];
+			//data[r*cols + c] = work[c*rows + r];
+			data[c*rows + r] = work[r*cols + c];
 		}
 	}
 																				delete [] work;
 }
-
+*/
 
 /*
 void transpose(unsigned char *data, int N, int M){
@@ -218,6 +220,38 @@ void transpose(unsigned char *data, int N, int M){
 }
 */
 
+
+void transpose(unsigned char *m, int w, int h){
+	int next, i;
+	unsigned char tmp;
+	for (int start = 0; start <= w * h - 1; start++) {
+		next = start;
+		i = 0;
+		do {	i++;
+			next = (next % h) * w + next / h;
+		} while (next > start);
+		if (next < start || i == 1) continue;
+		tmp = m[next = start];
+		do {
+			i = (next % h) * w + next / h;
+			m[next] = (i == start) ? tmp : m[i];
+			next = i;
+		} while (next > start);
+	}
+ }
+/*
+void transpose(unsigned char *data, int N, int M){
+	int nVals = N*M;
+	unsigned char *work = new unsigned char[nVals];
+	for(int i = 0; i < nVals; ++i){
+		work[i] = data[i];
+	}
+	for(int n = 0; n < nVals; ++n){
+		data[n] = work[M*(n%N) + (n/N)];
+	}
+	delete [] work;
+}
+*/
 
 /*
  * Writes an image to the given filename
@@ -253,17 +287,20 @@ void writeImage(std::string fileName, unsigned char *data, int projection, int n
 	switch(projection){
 		case 1:
 		case 2:
+			writeFile(std::string("orig_") + fileName, nCols, nRows, data);
 			transpose(data, nRows, nCols);
 			writeFile(fileName, nCols, nRows, data);
 			break;
 		case 3:
 		case 4:
+			writeFile(std::string("orig_") + fileName, nSheets, nRows, data);
 			transpose(data, nRows, nSheets);
 			writeFile(fileName, nSheets, nRows, data);
 			break;
 		case 5:
 		case 6:
-			transpose(data, nSheets, nCols);
+			writeFile(std::string("orig_") + fileName, nCols, nSheets, data);
+			transpose(data, nCols, nSheets);
 			writeFile(fileName, nCols, nSheets, data);
 			break;
 	}
