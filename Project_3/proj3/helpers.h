@@ -118,9 +118,9 @@ void projection(unsigned char *data, int nRows, int nCols, int nSheets, int proj
 		work[i] = data[i];
 	}
 
-	for(int x = 0; x < nCols; ++x){
+	for(int z = 0; z < nSheets; ++z){
 		for(int y = 0; y < nRows; ++y){
-			for(int z = 0; z < nSheets; ++z){
+			for(int x = 0; x < nCols; ++x){
 				// Assign new coordinates, based on projection
 				// type per rubric
 				switch(projection){
@@ -183,6 +183,26 @@ void projection(unsigned char *data, int nRows, int nCols, int nSheets, int proj
 }
 
 
+/*
+ *  * Transposes flattened 2D matrix from column major to row major
+ *   */
+void transpose(unsigned char *data, int rows, int cols){
+	int nVals = rows*cols;
+	unsigned char *work = new unsigned char[nVals];
+	for(int i = 0; i < nVals; ++i){
+		work[i] = data[i];
+	}
+	for(int r = 0; r < rows; ++r){
+		for(int c = 0; c < cols; ++c){
+			work[r*cols + c] = data[c*rows + r];
+			//data[c*rows + r] = work[r*cols + c];
+		}
+	}
+																				delete [] work;
+}
+
+
+/*
 void transpose(unsigned char *data, int N, int M){
 	int nVals = N*M;
 	unsigned char *work = new unsigned char[nVals];
@@ -196,6 +216,7 @@ void transpose(unsigned char *data, int N, int M){
 	}
 	delete [] work;
 }
+*/
 
 
 /*
@@ -232,7 +253,7 @@ void writeImage(std::string fileName, unsigned char *data, int projection, int n
 	switch(projection){
 		case 1:
 		case 2:
-			transpose(data, nCols, nRows);
+			transpose(data, nRows, nCols);
 			writeFile(fileName, nCols, nRows, data);
 			break;
 		case 3:

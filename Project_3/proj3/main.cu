@@ -113,15 +113,6 @@ int main(int argc, char **argv){
 	projection(rawImageData, nRows, nCols, nSheets, projType);
 	validate(cudaMemcpy(d_voxels, rawImageData, nVals*sizeof(unsigned char),cudaMemcpyHostToDevice));
 
-#if DEBUG
-	if(projType < 3){
-		//dumpSheet(rawImageData, projType, nRows, nCols, nSheets, 26);
-		for(int sh = 0; sh < nSheets; ++sh){
-			dumpSheet(rawImageData, projType, nRows, nCols, nSheets, sh);
-		}
-	}
-#endif
-
 	// Issue kernels
 	switch(projType){
 		case 1:	// Note: need braces to restrict scope of the local variables
@@ -160,10 +151,12 @@ int main(int argc, char **argv){
 				validate(cudaMalloc((void **)&d_globalMax, sizeof(float)));
 				
 				kernelMaxImage<<<nSheets, nRows>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nCols);
+				//kernelMaxImage<<<nSheets, nRows>>>(d_voxels,d_maxImage, d_weightedSums, d_globalMax, nCols);
 				validate(cudaPeekAtLastError()); // Check invalid launch
 				validate(cudaDeviceSynchronize()); // Check runtime error
 	
 				kernelSumImage<<<nSheets, nRows>>>(d_weightedSums, d_sumImage, d_globalMax);
+				//kernelSumImage<<<nSheets, nRows>>>(d_weightedSums, d_sumImage, d_globalMax);
 				validate(cudaPeekAtLastError());
 				validate(cudaDeviceSynchronize());
 			}
@@ -215,15 +208,22 @@ int main(int argc, char **argv){
 	/*
 	 * Clean up
 	 */
-	validate(cudaDeviceSynchronize()); // Check runtime error
+	cout << "A" << endl;
 	cudaFree(d_maxImage);
+	cout << "B" << endl;
 	cudaFree(d_sumImage);
+	cout << "C" << endl;
 	cudaFree(d_weightedSums);
+	cout << "D" << endl;
 	cudaFree(d_globalMax);
+
+	cout << "CUDA CLEANUP DONE MAIN" << endl;
 
 	delete [] rawImageData;
 	delete [] h_maxImage;
 	delete [] h_sumImage;
+
+	cout << "CLEANUP DONE MAIN" << endl;
 
 	return 0;
 }
